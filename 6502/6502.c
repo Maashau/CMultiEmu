@@ -271,6 +271,7 @@ void mos6502_init(mos6502_processor_st * pProcessor) {
 	pProcessor->reg.Y = 0;
 	pProcessor->reg.SR = SR_FLAG_UNUSED | SR_FLAG_BREAK | SR_FLAG_IRQ;
 	pProcessor->reg.SP = 0xFF;
+	OP_PRINT(printf("\033[4m addr op asm  |AC XR YR SP|nvdizc|cycles(tot) \033[m\n"));
 }
 
 /*******************************************************************************
@@ -279,13 +280,36 @@ void mos6502_init(mos6502_processor_st * pProcessor) {
 * Return: Cycles elapsed
 *******************************************************************************/
 U8 mos6502_handleOp(mos6502_processor_st * pProcessor) {
+	mos6502_addr oldPC = pProcessor->reg.PC;
 
 	U8 opCode = pProcessor->memIf.read8(pProcessor->reg.PC);
 
 	U8 retCode = mos6502_opCodes[opCode].handler(pProcessor, opCode, &mos6502_opCodes[opCode].opCode);
 
+	pProcessor->cycleCount += retCode;
+
+	OP_PRINT(
+		printf(" %04x %02X %-4s |%02X %02X %02X %02X|%d%d%d%d%d%d|%3d (%llu)\n",
+			oldPC,
+			opCode,
+			mos6502_opCodes[opCode].opCode.mnemonic,
+			pProcessor->reg.AC,
+			pProcessor->reg.X,
+			pProcessor->reg.Y,
+			pProcessor->reg.SP,
+			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? 1 : 0,
+			pProcessor->reg.SR & SR_FLAG_OVERFLOW ? 1 : 0,
+			pProcessor->reg.SR & SR_FLAG_DECIMAL ? 1 : 0,
+			pProcessor->reg.SR & SR_FLAG_IRQ ? 1 : 0,
+			pProcessor->reg.SR & SR_FLAG_ZERO ? 1 : 0,
+			pProcessor->reg.SR & SR_FLAG_CARRY ? 1 : 0,
+			retCode,
+			pProcessor->cycleCount
+		)
+	);
+	
 	if (retCode == 0xFF) {
-		printf("\033[25;1HNon-implemented op-code (%x)\n\n", opCode);
+		printf("Non-implemented op-code (%x)\n\n", opCode);
 		//exit(1);
 	}
 

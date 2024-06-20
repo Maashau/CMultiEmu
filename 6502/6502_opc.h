@@ -5,7 +5,7 @@
 
 
 typedef struct {
-	const char * instruction;
+	const char * mnemonic;
 	U8 bytes;
 	U8 cycles;
 } opCode__st;

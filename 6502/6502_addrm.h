@@ -1,11 +1,7 @@
 #include "6502.h"
 
-typedef U8 mos6502_imm;
-typedef I8 mos6502_rel;
-
-
-mos6502_imm		addrm_immediate(mos6502_processor_st * processor);
-mos6502_rel		addrm_relative(mos6502_processor_st * processor);
+mos6502_addr	addrm_immediate(mos6502_processor_st * processor);
+mos6502_addr	addrm_relative(mos6502_processor_st * processor);
 mos6502_addr	addrm_absolute(mos6502_processor_st * processor);
 mos6502_addr	addrm_absoluteXind(mos6502_processor_st * processor);
 mos6502_addr	addrm_absoluteYind(mos6502_processor_st * processor);

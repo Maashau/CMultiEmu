@@ -3,7 +3,7 @@
 #define FILE_6502_H
 #define PRINT_OPS 1
 
-#if PRINT_OPS == 0
+#if PRINT_OPS == 1
 # define OP_PRINT(_x) _x
 #else
 # define OP_PRINT(_x)
@@ -17,6 +17,7 @@
 typedef unsigned char U8;
 typedef signed char I8;
 typedef unsigned short U16;
+typedef unsigned long long U64;
 
 typedef U16 mos6502_addr;
 
@@ -44,6 +45,7 @@ typedef struct {
 typedef struct {
 	mos6502_reg_st reg;
 	mos6502_memInterface_st memIf;
+	U64 cycleCount;
 } mos6502_processor_st;
 
 enum {

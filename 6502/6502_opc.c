@@ -10,20 +10,6 @@
 #include "6502_opc.h"
 #include "6502_addrm.h"
 
-#define DBG_FN_PRINT											\
-	printf(														\
-		"0x%04X 0x%02X: %s: (%s%s%s%s%s%s)\n",					\
-		pProcessor->reg.PC,										\
-		opCode,											\
-		__FUNCTION__,											\
-		pProcessor->reg.SR & SR_FLAG_NEGATIVE	? "N " : "",	\
-		pProcessor->reg.SR & SR_FLAG_ZERO		? "Z " : "",	\
-		pProcessor->reg.SR & SR_FLAG_CARRY		? "C " : "",	\
-		pProcessor->reg.SR & SR_FLAG_IRQ			? "I " : "",	\
-		pProcessor->reg.SR & SR_FLAG_DECIMAL		? "D " : "",	\
-		pProcessor->reg.SR & SR_FLAG_OVERFLOW	? "V " : ""		\
-	)
-
 /*******************************************************************************
 * Add Memory to Accumulator with Carry.
 *
@@ -42,26 +28,41 @@ U8 mos6502_ADC(
 	U8 memValue = 0;
 	U8 tempAc = pProcessor->reg.AC;
 
-	OP_PRINT(DBG_FN_PRINT);
-
 	pProcessor->reg.SR &= ~(SR_FLAG_NEGATIVE | SR_FLAG_ZERO | SR_FLAG_CARRY | SR_FLAG_OVERFLOW);
 
 	// TODO implement decimal mode (BCD)
 
 	switch (opCode) {
+		case 0x61: // (indirect,X)
+			memValue = pProcessor->memIf.read8(addrm_indexedIndirect(pProcessor));
+			cyclesPassed = 6;
+			break;
 		case 0x65: // zeropage
 			memValue = pProcessor->memIf.read8(addrm_zeropage(pProcessor));
 			cyclesPassed = 3;
 			break;
-
 		case 0x69: // immediate
-			memValue = addrm_immediate(pProcessor);
+			memValue = pProcessor->memIf.read8(addrm_immediate(pProcessor));
 			cyclesPassed = 2;
 			break;
-
-		case 0x6D: {// absolute
+		case 0x6D: // absolute
 			memValue = pProcessor->memIf.read8(addrm_absolute(pProcessor));
 			cyclesPassed = 4;
+			break;
+		case 0x71: {// (indirect),Y
+			mos6502_addr address = addrm_indirectIndexed(pProcessor);
+			memValue = pProcessor->memIf.read8(address);
+			cyclesPassed = 5 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, address);
+			break;
+		}
+		case 0x75: // zeropage,X
+			memValue = pProcessor->memIf.read8(addrm_zeropageXind(pProcessor));
+			cyclesPassed = 4;
+			break;
+		case 0x79: {// absolute,Y
+			mos6502_addr address = addrm_absoluteYind(pProcessor);
+			memValue = pProcessor->memIf.read8(address);
+			cyclesPassed = 4 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, address);
 			break;
 		}
 		case 0x7D: {// absolute,X
@@ -70,10 +71,7 @@ U8 mos6502_ADC(
 			cyclesPassed = 4 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, address);
 			break;
 		}
-		case 0x75: // zeropage,X
-		case 0x79: // absolute,Y
-		case 0x61: // (indirect,X)
-		case 0x71: // (indirect),Y
+		default:
 			return 0xFF;
 	}
 			
@@ -90,26 +88,7 @@ U8 mos6502_ADC(
 	pProcessor->reg.SR |= ((U16)tempAc + (U16)memValue > 255) ? SR_FLAG_CARRY : 0;
 	pProcessor->reg.SR |= pProcessor->reg.AC & SR_FLAG_NEGATIVE;
 	pProcessor->reg.SR |= pProcessor->reg.AC == 0 ? SR_FLAG_ZERO : 0;
-	
-	OP_PRINT(
-		printf(
-			"\tAdded value %d/%d/0x%02X to Accumulator (%d/%d/0x%02X), result: %d/%d/0x%02X. %s%s%s%s\n\n",
-			memValue,
-			(I8)memValue,
-			memValue,
-			tempAc,
-			(I8)tempAc,
-			tempAc,
-			pProcessor->reg.AC,
-			(I8)pProcessor->reg.AC,
-			pProcessor->reg.AC,
-			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? "N " : "",
-			pProcessor->reg.SR & SR_FLAG_ZERO ? "Z " : "",
-			pProcessor->reg.SR & SR_FLAG_CARRY ? "C " : "",
-			pProcessor->reg.SR & SR_FLAG_OVERFLOW ? "O " : ""
-		)
-	);
-	
+		
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
 	return cyclesPassed;
@@ -131,7 +110,6 @@ U8 mos6502_ALR(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -159,7 +137,6 @@ U8 mos6502_ANC(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -187,7 +164,6 @@ U8 mos6502_AND(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -215,7 +191,6 @@ U8 mos6502_ANE(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -243,7 +218,6 @@ U8 mos6502_ARR(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -271,7 +245,6 @@ U8 mos6502_ASL(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -299,24 +272,12 @@ U8 mos6502_BCC(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	cyclesPassed = 2;
 
-	if (pProcessor->reg.SR & SR_FLAG_CARRY) {
-		OP_PRINT(printf("\tCarry bit set, continued to next instruction\n\n"));
+	if (!(pProcessor->reg.SR & SR_FLAG_CARRY))  {
 
-	} else {
-		I8 offset = addrm_relative(pProcessor);
-		mos6502_addr branchAddress = pProcessor->reg.PC + offset;
-
-		OP_PRINT(
-			printf(
-				"\tCarry bit not set, branching to offset %d (address 0x%04X)\n\n",
-				offset,
-				branchAddress + pOpCodeData->bytes
-			)
-		);
+		mos6502_addr branchAddress = addrm_relative(pProcessor);
 
 		cyclesPassed += 1 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, branchAddress);
 		
@@ -344,24 +305,12 @@ U8 mos6502_BCS(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	cyclesPassed = 2;
 
-	if (!(pProcessor->reg.SR & SR_FLAG_CARRY)) {
-		OP_PRINT(printf("\tCarry bit not set, continued to next instruction\n\n"));
+	if (pProcessor->reg.SR & SR_FLAG_CARRY) {
 
-	} else {
-		I8 offset = addrm_relative(pProcessor);
-		mos6502_addr branchAddress = pProcessor->reg.PC + offset;
-
-		OP_PRINT(
-			printf(
-				"\tCarry bit set, branching to offset %d (address 0x%04X)\n\n",
-				offset,
-				branchAddress + pOpCodeData->bytes
-			)
-		);
+		mos6502_addr branchAddress = addrm_relative(pProcessor);
 
 		cyclesPassed += 1 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, branchAddress);
 		
@@ -389,24 +338,12 @@ U8 mos6502_BEQ(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	cyclesPassed = 2;
 
-	if (!(pProcessor->reg.SR & SR_FLAG_ZERO)) {
-		OP_PRINT(printf("\tZero bit not set, continued to next instruction\n\n"));
+	if (pProcessor->reg.SR & SR_FLAG_ZERO) {
 
-	} else {
-		I8 offset = addrm_relative(pProcessor);
-		mos6502_addr branchAddress = pProcessor->reg.PC + offset;
-
-		OP_PRINT(
-			printf(
-				"\tZero bit set, branching to offset %d (address 0x%04X)\n\n",
-				offset,
-				branchAddress + pOpCodeData->bytes
-			)
-		);
+		mos6502_addr branchAddress = addrm_relative(pProcessor);
 
 		cyclesPassed += 1 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, branchAddress);
 		
@@ -436,7 +373,6 @@ U8 mos6502_BIT(
 	U8 memValue = 0;
 	mos6502_addr address = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	pProcessor->reg.SR &= ~(SR_FLAG_NEGATIVE | SR_FLAG_ZERO | SR_FLAG_OVERFLOW);
 
@@ -457,20 +393,6 @@ U8 mos6502_BIT(
 
 	pProcessor->reg.SR |= memValue & (SR_FLAG_ZERO | SR_FLAG_OVERFLOW);
 	pProcessor->reg.SR |= memValue & pProcessor->reg.AC == 0 ? SR_FLAG_ZERO : 0;
-
-	OP_PRINT(
-		printf(
-			"\tAccumulator (%d/0x%02X) - Memory (%d/0x%02X) (address: 0x%04X) bit test resulted to flags: %s%s%s\n\n",
-			pProcessor->reg.AC,
-			pProcessor->reg.AC,
-			memValue,
-			memValue,
-			address,
-			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? "N ": "",
-			pProcessor->reg.SR & SR_FLAG_ZERO ? "Z ": "",
-			pProcessor->reg.SR & SR_FLAG_OVERFLOW ? "V ": ""
-		)
-	);
 
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -493,24 +415,11 @@ U8 mos6502_BMI(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	cyclesPassed = 2;
 
-	if (!(pProcessor->reg.SR & SR_FLAG_NEGATIVE)) {
-		OP_PRINT(printf("\tNegative bit not set, continued to next instruction."));
-
-	} else {
-		I8 offset = addrm_relative(pProcessor);
-		mos6502_addr branchAddress = pProcessor->reg.PC + offset;
-
-		OP_PRINT(
-			printf(
-				"\tNegative bit set, branching to offset %d (address 0x%04X)\n\n",
-				offset,
-				branchAddress + pOpCodeData->bytes
-			)
-		);
+	if (pProcessor->reg.SR & SR_FLAG_NEGATIVE) {
+		mos6502_addr branchAddress = addrm_relative(pProcessor);
 
 		cyclesPassed += 1 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, branchAddress);
 		
@@ -535,24 +444,11 @@ U8 mos6502_BNE(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	cyclesPassed = 2;
 
-	if (pProcessor->reg.SR & SR_FLAG_ZERO) {
-		OP_PRINT(printf("\tZero bit set, continued to next instruction."));
-
-	} else {
-		I8 offset = addrm_relative(pProcessor);
-		mos6502_addr branchAddress = pProcessor->reg.PC + offset;
-
-		OP_PRINT(
-			printf(
-				"\tZero bit not set, branching to offset %d (address 0x%04X)\n\n",
-				offset,
-				branchAddress + pOpCodeData->bytes
-			)
-		);
+	if (!(pProcessor->reg.SR & SR_FLAG_ZERO)) {
+		mos6502_addr branchAddress = addrm_relative(pProcessor);
 
 		cyclesPassed += 1 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, branchAddress);
 		
@@ -580,7 +476,6 @@ U8 mos6502_BPL(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -608,20 +503,11 @@ U8 mos6502_BRK(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 // TODO use addrm functions
 	U16 address = pProcessor->memIf.read16(0xFFFE);
 
 	// TODO
-
-	OP_PRINT(
-		printf(
-			"\tBreak on address 0x%04X (BRK handler address: 0x%04X)\n\n",
-			pProcessor->reg.PC,
-			address
-		)
-	);
 
 	return 0xFF;
 	exit(0);
@@ -647,7 +533,6 @@ U8 mos6502_BVC(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -675,7 +560,6 @@ U8 mos6502_BVS(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -703,13 +587,10 @@ U8 mos6502_CLC(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	pProcessor->reg.SR &= ~SR_FLAG_CARRY;
 
 	cyclesPassed = 2;
-	
-	OP_PRINT(printf("\tCleared carry flag.\n\n"));
 
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -732,7 +613,6 @@ U8 mos6502_CLD(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -760,7 +640,6 @@ U8 mos6502_CLI(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -788,7 +667,6 @@ U8 mos6502_CLV(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -818,27 +696,50 @@ U8 mos6502_CMP(
 	U8 memValue = 0;
 	U16 address = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	pProcessor->reg.SR &= ~(SR_FLAG_ZERO | SR_FLAG_NEGATIVE | SR_FLAG_CARRY);
 
 	switch (opCode) {
+		case 0xC1: // (indirect,X)
+			address = addrm_indexedIndirect(pProcessor);
+			memValue = pProcessor->memIf.read8(address);
+			cyclesPassed = 6;
+			break;
+		case 0xC5: // zeropage
+			address = addrm_zeropage(pProcessor);
+			memValue = pProcessor->memIf.read8(address);
+			cyclesPassed = 3;
+			break;
 		case 0xC9: // immediate
-			address = pProcessor->reg.PC + 1;
+			address = addrm_immediate(pProcessor);
 			memValue = pProcessor->memIf.read8(address);
 			cyclesPassed = 2;
+			break;
+		case 0xCD: // absolute
+			address = addrm_absolute(pProcessor);
+			memValue = pProcessor->memIf.read8(address);
+			cyclesPassed = 4;
 			break;
 		case 0xD1: // (indirect),Y
 			address = addrm_indirectIndexed(pProcessor);
 			memValue = pProcessor->memIf.read8(address);
 			cyclesPassed = 5 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, address);
 			break;
-		case 0xC5: // zeropage
 		case 0xD5: // zeropage,X
-		case 0xCD: // absolute
+			address = addrm_zeropageXind(pProcessor);
+			memValue = pProcessor->memIf.read8(address);
+			cyclesPassed = 4;
+			break;
 		case 0xDD: // absolute,X
+			address = addrm_absoluteXind(pProcessor);
+			memValue = pProcessor->memIf.read8(address);
+			cyclesPassed = 4;
+			break;
 		case 0xD9: // absolute,Y
-		case 0xC1: // (indirect,X
+			address = addrm_absoluteYind(pProcessor);
+			memValue = pProcessor->memIf.read8(address);
+			cyclesPassed = 4;
+			break;
 		default:
 			return 0xFF;
 	}
@@ -846,20 +747,6 @@ U8 mos6502_CMP(
 	pProcessor->reg.SR |= (pProcessor->reg.AC - memValue) & SR_FLAG_NEGATIVE;
 	pProcessor->reg.SR |= pProcessor->reg.AC == memValue ? SR_FLAG_ZERO : 0;
 	pProcessor->reg.SR |= pProcessor->reg.AC >= memValue ? SR_FLAG_CARRY : 0;
-
-	OP_PRINT(
-		printf(
-			"\tAccumulator (%d/0x%02X) - Memory (%d/0x%02X) (address: 0x%04X) comparison resulted to flags: %s%s%s\n\n",
-			pProcessor->reg.AC,
-			pProcessor->reg.AC,
-			memValue,
-			memValue,
-			address,
-			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? "N ": "",
-			pProcessor->reg.SR & SR_FLAG_ZERO ? "Z ": "",
-			pProcessor->reg.SR & SR_FLAG_CARRY ? "C ": ""
-		)
-	);
 
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -883,36 +770,29 @@ U8 mos6502_CPX(
 	U8 cyclesPassed = 0;
 	U8 memValue = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	pProcessor->reg.SR &= ~(SR_FLAG_ZERO | SR_FLAG_NEGATIVE | SR_FLAG_CARRY);
 
 	switch (opCode) {
 		case 0xE0: // immediate
-			memValue = addrm_immediate(pProcessor);
+			memValue = pProcessor->memIf.read8(addrm_immediate(pProcessor));
 			cyclesPassed = 2;
 			break;
 		case 0xE4: // zeropage
+			memValue = pProcessor->memIf.read8(addrm_zeropage(pProcessor));
+			cyclesPassed = 3;
+			break;
 		case 0xEC: // absolute
+			memValue = pProcessor->memIf.read8(addrm_absolute(pProcessor));
+			cyclesPassed = 4;
+			break;
+		default:
 			return 0xFF;
 	}
 	
 	pProcessor->reg.SR |= (pProcessor->reg.X - memValue) & SR_FLAG_NEGATIVE;
 	pProcessor->reg.SR |= pProcessor->reg.X == memValue ? SR_FLAG_ZERO : 0;
 	pProcessor->reg.SR |= pProcessor->reg.X >= memValue ? SR_FLAG_CARRY : 0;
-
-	OP_PRINT(
-		printf(
-			"\tIndex X (%d/0x%02X) - Memory (%d/0x%02X) comparison resulted to flags: %s%s%s\n\n",
-			pProcessor->reg.X,
-			pProcessor->reg.X,
-			memValue,
-			memValue,
-			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? "N ": "",
-			pProcessor->reg.SR & SR_FLAG_ZERO ? "Z ": "",
-			pProcessor->reg.SR & SR_FLAG_CARRY ? "C ": ""
-		)
-	);
 	
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -936,36 +816,29 @@ U8 mos6502_CPY(
 	U8 cyclesPassed = 0;
 	U8 memValue = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 	
 	pProcessor->reg.SR &= ~(SR_FLAG_ZERO | SR_FLAG_NEGATIVE | SR_FLAG_CARRY);
 
 	switch (opCode) {
 		case 0xC0: // immediate
-			memValue = addrm_immediate(pProcessor);
+			memValue = pProcessor->memIf.read8(addrm_immediate(pProcessor));
 			cyclesPassed = 2;
 			break;
 		case 0xC4: // zeropage
+			memValue = pProcessor->memIf.read8(addrm_zeropage(pProcessor));
+			cyclesPassed = 3;
+			break;
 		case 0xCC: // absolute
+			memValue = pProcessor->memIf.read8(addrm_absolute(pProcessor));
+			cyclesPassed = 4;
+			break;
+		default:
 			return 0xFF;
 	}
 	
 	pProcessor->reg.SR |= (pProcessor->reg.Y - memValue) & SR_FLAG_NEGATIVE;
 	pProcessor->reg.SR |= pProcessor->reg.Y == memValue ? SR_FLAG_ZERO : 0;
 	pProcessor->reg.SR |= pProcessor->reg.Y >= memValue ? SR_FLAG_CARRY : 0;
-
-	OP_PRINT(
-		printf(
-			"\tIndex Y (%d/0x%02X) - Memory (%d/0x%02X) comparison resulted to flags: %s%s%s\n\n",
-			pProcessor->reg.Y,
-			pProcessor->reg.Y,
-			memValue,
-			memValue,
-			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? "N ": "",
-			pProcessor->reg.SR & SR_FLAG_ZERO ? "Z ": "",
-			pProcessor->reg.SR & SR_FLAG_CARRY ? "C ": ""
-		)
-	);
 	
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -988,7 +861,6 @@ U8 mos6502_DCP(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -1016,7 +888,6 @@ U8 mos6502_DEC(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -1044,7 +915,6 @@ U8 mos6502_DEX(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	pProcessor->reg.SR &= ~(SR_FLAG_ZERO | SR_FLAG_NEGATIVE);
 
@@ -1054,18 +924,6 @@ U8 mos6502_DEX(
 	pProcessor->reg.SR |= pProcessor->reg.X == 0 ? SR_FLAG_ZERO : 0;
 
 	cyclesPassed = 2;
-
-	OP_PRINT(
-		printf(
-			"\tDecremented Index X (%d/%d -> %d/%d). %s%s\n\n",
-			pProcessor->reg.X + 1,
-			(I8)pProcessor->reg.X + 1,
-			pProcessor->reg.X,
-			(I8)pProcessor->reg.X,
-			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? "N " : "",
-			pProcessor->reg.SR & SR_FLAG_ZERO ? "Z " : ""
-		)
-	);
 
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -1088,7 +946,6 @@ U8 mos6502_DEY(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	pProcessor->reg.SR &= ~(SR_FLAG_ZERO | SR_FLAG_NEGATIVE);
 
@@ -1098,18 +955,6 @@ U8 mos6502_DEY(
 	pProcessor->reg.SR |= pProcessor->reg.Y == 0 ? SR_FLAG_ZERO : 0;
 
 	cyclesPassed = 2;
-
-	OP_PRINT(
-		printf(
-			"\tDecremented Index Y (%d/%d -> %d/%d). %s%s\n\n",
-			pProcessor->reg.Y + 1,
-			(I8)pProcessor->reg.Y + 1,
-			pProcessor->reg.Y,
-			(I8)pProcessor->reg.Y,
-			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? "N " : "",
-			pProcessor->reg.SR & SR_FLAG_ZERO ? "Z " : ""
-		)
-	);
 
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -1134,42 +979,56 @@ U8 mos6502_EOR(
 	U8 tempAc = pProcessor->reg.AC;
 	U8 memValue = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 	
 	pProcessor->reg.SR &= ~(SR_FLAG_ZERO | SR_FLAG_NEGATIVE);
 
 	switch (opCode) {
-		case 0x49: // immediate
-			memValue = addrm_immediate(pProcessor);
-			pProcessor->reg.AC ^= memValue;
-			cyclesPassed = 2;
+		case 0x41: // (indirect, X)
+			memValue = pProcessor->memIf.read8(addrm_indexedIndirect(pProcessor));
+			cyclesPassed = 6;
 			break;
 		case 0x45: // zeropage
-		case 0x55: // zeropage, X
+			memValue = pProcessor->memIf.read8(addrm_zeropage(pProcessor));
+			cyclesPassed = 3;
+			break;
+		case 0x49: // immediate
+			memValue = pProcessor->memIf.read8(addrm_immediate(pProcessor));
+			cyclesPassed = 2;
+			break;
 		case 0x4D: // absolute
-		case 0x5D: // absolute, X
-		case 0x59: // absolute, Y
-		case 0x41: // (indirect, X)
-		case 0x51: // (indirect), Y
+			memValue = pProcessor->memIf.read8(addrm_absolute(pProcessor));
+			cyclesPassed = 4;
+			break;
+		case 0x51: {// (indirect), Y
+			mos6502_addr address = addrm_indirectIndexed(pProcessor);
+			memValue = pProcessor->memIf.read8(address);
+			cyclesPassed = 6 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, address);
+			break;
+		}
+		case 0x55: // zeropage, X
+			memValue = pProcessor->memIf.read8(addrm_zeropageXind(pProcessor));
+			cyclesPassed = 4;
+			break;
+		case 0x59: {// absolute, Y
+			mos6502_addr address = addrm_absoluteYind(pProcessor);
+			memValue = pProcessor->memIf.read8(address);
+			cyclesPassed = 4 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, address);
+			break;
+		}
+		case 0x5D: {// absolute, X
+			mos6502_addr address = addrm_absoluteXind(pProcessor);
+			memValue = pProcessor->memIf.read8(address);
+			cyclesPassed = 4 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, address);
+			break;
+		}
+		default:
 			return 0xFF;
 	}
+
+	pProcessor->reg.AC ^= memValue;
 	
 	pProcessor->reg.SR |= pProcessor->reg.AC & SR_FLAG_NEGATIVE;
 	pProcessor->reg.SR |= pProcessor->reg.AC == 0 ? SR_FLAG_ZERO : 0;
-
-	OP_PRINT(
-		printf(
-			"\tExclusive-OR of Memory (%d / 0x%02X) and Accumulator (%d / 0x%02X) was %d / 0x%02X. %s%s\n\n",
-			memValue,
-			memValue,
-			tempAc,
-			tempAc,
-			pProcessor->reg.AC,
-			pProcessor->reg.AC,
-			(pProcessor->reg.SR & SR_FLAG_NEGATIVE) ? "N set." : "",
-			pProcessor->reg.SR & SR_FLAG_ZERO ? "Z set." : ""
-		)
-	);
 
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -1192,7 +1051,6 @@ U8 mos6502_INC(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -1220,11 +1078,11 @@ U8 mos6502_INX(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
-	pProcessor->reg.X++;
-
-	cyclesPassed = 2;
+	switch (opCode) {
+		default:
+			return 0xFF;
+	}
 
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -1247,23 +1105,12 @@ U8 mos6502_INY(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	pProcessor->reg.SR &= ~(SR_FLAG_ZERO | SR_FLAG_NEGATIVE);
 
 	pProcessor->reg.Y++;
 
 	cyclesPassed = 2;
-
-	OP_PRINT(
-		printf(
-			"\tIncremented Index Y (%d/%d -> %d/%d)\n\n",
-			pProcessor->reg.Y - 1,
-			(I8)pProcessor->reg.Y - 1,
-			pProcessor->reg.Y,
-			(I8)pProcessor->reg.Y
-		)
-	);
 
 	pProcessor->reg.SR |= pProcessor->reg.Y & SR_FLAG_NEGATIVE;
 	pProcessor->reg.SR |= pProcessor->reg.Y == 0 ? SR_FLAG_ZERO : 0;
@@ -1289,7 +1136,6 @@ U8 mos6502_ISC(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -1317,7 +1163,6 @@ U8 mos6502_JAM(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -1330,13 +1175,12 @@ U8 mos6502_JAM(
 }
 
 /*******************************************************************************
-* Jump to New Location
+* 
 *
-* operand 1st byte -> PCL
-* operand 2nd byte -> PCH
 *
-* N Z C I D V
-* - - - - - -
+*
+*
+*
 *******************************************************************************/
 U8 mos6502_JMP(
 	mos6502_processor_st *	pProcessor,
@@ -1346,20 +1190,13 @@ U8 mos6502_JMP(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
-		case 0x4C: // absolute
-			pProcessor->reg.PC = addrm_absolute(pProcessor);
-			cyclesPassed = 3;
-			break;
-		case 0x6C: // indirect
-			pProcessor->reg.PC = addrm_indirect(pProcessor);
-			cyclesPassed = 5;
-			break;
 		default:
 			return 0xFF;
 	}
+
+	pProcessor->reg.PC += pOpCodeData->bytes;
 
 	return cyclesPassed;
 }
@@ -1383,7 +1220,6 @@ U8 mos6502_JSR(
 	U8 cyclesPassed = 0;
 	U16 storedAddress = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	addrm_stackPush16(pProcessor, pProcessor->reg.PC + 2);
 
@@ -1392,16 +1228,6 @@ U8 mos6502_JSR(
 	pProcessor->reg.PC = addrm_absolute(pProcessor);
 
 	cyclesPassed = 6;
-
-	OP_PRINT(
-		printf(
-			"\tStored Return Address to stack ((PC)0x%04X + 2), Jump to location (0x%04X). SP=0x%04X\n\n",
-			storedAddress,
-			pProcessor->reg.PC,
-			pProcessor->reg.SP + 0x100
-		)
-	);
-
 
 	return cyclesPassed;
 }
@@ -1422,7 +1248,6 @@ U8 mos6502_LAS(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -1450,7 +1275,6 @@ U8 mos6502_LAX(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -1479,50 +1303,52 @@ U8 mos6502_LDA(
 	U8 cyclesPassed = 0;
 	U16 address = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	pProcessor->reg.SR &= ~(SR_FLAG_ZERO | SR_FLAG_NEGATIVE);
 
 	switch (opCode) {
+		case 0xA1: // (indirect, X)
+			address = addrm_indexedIndirect(pProcessor);
+			pProcessor->reg.AC = pProcessor->memIf.read8(address);
+			cyclesPassed = 6;
+			break;
+		case 0xA5: // zeropage
+			address = addrm_zeropage(pProcessor);
+			pProcessor->reg.AC = pProcessor->memIf.read8(address);
+			cyclesPassed = 3;
+			break;
 		case 0xA9:	// Immediate
-			pProcessor->reg.AC = addrm_immediate(pProcessor);
+			address = addrm_immediate(pProcessor);
+			pProcessor->reg.AC = pProcessor->memIf.read8(address);
 			cyclesPassed = 2;
+			break;
+		case 0xAD: // absolute
+			address = addrm_absolute(pProcessor);
+			pProcessor->reg.AC = pProcessor->memIf.read8(address);
+			cyclesPassed = 4;
 			break;
 		case 0xB1: // (indirect), Y
 			address = addrm_indirectIndexed(pProcessor);
 			pProcessor->reg.AC = pProcessor->memIf.read8(address);
 			cyclesPassed = 5 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, address);
 			break;
+		case 0xB5: // zeropage, X
+			address = addrm_zeropageXind(pProcessor);
+			pProcessor->reg.AC = pProcessor->memIf.read8(address);
+			cyclesPassed = 4;
+			break;
+		case 0xB9: // absolute, Y
+			address = addrm_absoluteYind(pProcessor);
+			pProcessor->reg.AC = pProcessor->memIf.read8(address);
+			cyclesPassed = 5 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, address);
+			break;
 		case 0xBD: // absolute, X
 			address = addrm_absoluteXind(pProcessor);
 			pProcessor->reg.AC = pProcessor->memIf.read8(address);
-			cyclesPassed = 4 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, address);
+			cyclesPassed = 6;
 			break;
-		case 0xA1: // (indirect, x)
-		case 0xA5: // zeropage
-		case 0xAD: // absolute
-		case 0xB5: // zeropage, X
-		case 0xB9: // absolute, Y
+		default:
 			return 0xFF;
-	}
-
-	if (opCode == 0xA9) {
-		OP_PRINT(
-			printf(
-				"\tLoaded Accumulator with immediate value %d (0x%02X)\n\n",
-				pProcessor->reg.AC,
-				pProcessor->reg.AC
-			)
-		);
-	} else {
-		OP_PRINT(
-			printf(
-				"\tLoaded Accumulator with value %d (0x%02X) from memory address 0x%04X\n\n",
-				pProcessor->reg.AC,
-				pProcessor->reg.AC,
-				address
-			)
-		);
 	}
 
 	/* Update status register zero and negative flags. */
@@ -1549,35 +1375,43 @@ U8 mos6502_LDX(
 ) {
 
 	U8 cyclesPassed = 0;
+	mos6502_addr address = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	pProcessor->reg.SR &= ~(SR_FLAG_NEGATIVE | SR_FLAG_ZERO);
 
 	switch (opCode) {
 		case 0xA2: // immediate
-			pProcessor->reg.X = addrm_immediate(pProcessor);
+			address = addrm_immediate(pProcessor);
+			pProcessor->reg.X = pProcessor->memIf.read8(address);
 			cyclesPassed = 2;
 			break;
 		case 0xA6: // zeropage
+			address = addrm_zeropage(pProcessor);
+			pProcessor->reg.X = pProcessor->memIf.read8(address);
+			cyclesPassed = 3;
+			break;
 		case 0xB6: // zeropage,Y
+			address = addrm_zeropageYind(pProcessor);
+			pProcessor->reg.X = pProcessor->memIf.read8(address);
+			cyclesPassed = 4;
+			break;
 		case 0xAE: // absolute
+			address = addrm_absolute(pProcessor);
+			pProcessor->reg.X = pProcessor->memIf.read8(address);
+			cyclesPassed = 4;
+			break;
 		case 0xBE: // absolute,Y
+			address = addrm_absoluteYind(pProcessor);
+			pProcessor->reg.X = pProcessor->memIf.read8(address);
+			cyclesPassed = 4 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, address);
+			break;
+		default:
 			return 0xFF;
 	}
 
 	pProcessor->reg.SR |= pProcessor->reg.X & SR_FLAG_NEGATIVE;
 	pProcessor->reg.SR |= pProcessor->reg.X == 0 ? SR_FLAG_ZERO : 0;
-
-	OP_PRINT(
-		printf(
-			"\tLoaded Index X with value %d (0x%04X). %s%s\n\n",
-			pProcessor->reg.X,
-			pProcessor->reg.X,
-			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? "N " : "",
-			pProcessor->reg.SR & SR_FLAG_ZERO ? "Z " : ""
-		)
-	);
 
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -1599,35 +1433,43 @@ U8 mos6502_LDY(
 ) {
 
 	U8 cyclesPassed = 0;
+	mos6502_addr address = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	pProcessor->reg.SR &= ~(SR_FLAG_NEGATIVE | SR_FLAG_ZERO);
 
 	switch (opCode) {
 		case 0xA0: //immediate
-			pProcessor->reg.Y = addrm_immediate(pProcessor);
+			address = addrm_immediate(pProcessor);
+			pProcessor->reg.Y = pProcessor->memIf.read8(address);
 			cyclesPassed = 2;
 			break;
 		case 0xA4: //zeropage
+			address = addrm_zeropage(pProcessor);
+			pProcessor->reg.Y = pProcessor->memIf.read8(address);
+			cyclesPassed = 3;
+			break;
 		case 0xB4: //zeropage,X
+			address = addrm_zeropageXind(pProcessor);
+			pProcessor->reg.Y = pProcessor->memIf.read8(address);
+			cyclesPassed = 4;
+			break;
 		case 0xAC: //absolute
+			address = addrm_absolute(pProcessor);
+			pProcessor->reg.Y = pProcessor->memIf.read8(address);
+			cyclesPassed = 4;
+			break;
 		case 0xBC: //absolute,X
+			address = addrm_absoluteXind(pProcessor);
+			pProcessor->reg.Y = pProcessor->memIf.read8(address);
+			cyclesPassed = 4 + MOS6502_OUTOFPAGE(pProcessor->reg.PC, address);
+			break;
+		default:
 			return 0xFF;
 	}
 
 	pProcessor->reg.SR |= pProcessor->reg.Y & SR_FLAG_NEGATIVE;
 	pProcessor->reg.SR |= pProcessor->reg.Y == 0 ? SR_FLAG_ZERO : 0;
-
-	OP_PRINT(
-		printf(
-			"\tLoaded Index Y with value %d (0x%04X). %s%s\n\n",
-			pProcessor->reg.Y,
-			pProcessor->reg.Y,
-			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? "N " : "",
-			pProcessor->reg.SR & SR_FLAG_ZERO ? "Z " : ""
-		)
-	);
 
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -1649,37 +1491,54 @@ U8 mos6502_LSR(
 ) {
 
 	U8 cyclesPassed = 0;
+	U8 origVal = 0;
+	U8 shiftedVal = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 	
 	pProcessor->reg.SR &= ~(SR_FLAG_NEGATIVE | SR_FLAG_ZERO | SR_FLAG_CARRY);
 
 	switch (opCode) {
-		case 0x4A: {// accumulator
-			U8 tempAc = pProcessor->reg.AC;
-			pProcessor->reg.SR |= pProcessor->reg.AC & SR_FLAG_CARRY;
-			pProcessor->reg.AC = pProcessor->reg.AC >> 1;
-			pProcessor->reg.SR |= pProcessor->reg.AC == 0 ? SR_FLAG_ZERO : 0;
-			OP_PRINT(
-				printf(
-					"\tShifted accumulator (%d/%d/0x%02X) 1 bit to the right, result: %d/%d/0x%02X. %s%s\n\n",
-					tempAc,
-					tempAc,
-					tempAc,
-					pProcessor->reg.AC,
-					pProcessor->reg.AC,
-					pProcessor->reg.AC,
-					pProcessor->reg.SR & SR_FLAG_ZERO ? "Z " : "",
-					pProcessor->reg.SR & SR_FLAG_CARRY ? "C " : ""
-				)
-			);
+		case 0x4A: // accumulator
+			origVal = pProcessor->reg.AC;
+			pProcessor->reg.SR |= origVal & SR_FLAG_CARRY;
+			pProcessor->reg.AC = origVal >> 1;
+			shiftedVal = pProcessor->reg.AC;
+			pProcessor->reg.SR |= shiftedVal == 0 ? SR_FLAG_ZERO : 0;
 			cyclesPassed = 2;
 			break;
-		}
 		case 0x46: // zeropage
+			origVal = pProcessor->memIf.read8(addrm_zeropage(pProcessor));
+			pProcessor->reg.SR |= origVal & SR_FLAG_CARRY;
+			pProcessor->memIf.write8(addrm_zeropage(pProcessor), origVal >> 1);
+			shiftedVal = pProcessor->memIf.read8(addrm_zeropage(pProcessor));
+			pProcessor->reg.SR |= shiftedVal == 0 ? SR_FLAG_ZERO : 0;
+			cyclesPassed = 5;
+			break;
 		case 0x56: // zeropage,X
+			origVal = pProcessor->memIf.read8(addrm_zeropageXind(pProcessor));
+			pProcessor->reg.SR |= origVal & SR_FLAG_CARRY;
+			pProcessor->memIf.write8(addrm_zeropageXind(pProcessor), origVal >> 1);
+			shiftedVal = pProcessor->memIf.read8(addrm_zeropageXind(pProcessor));
+			pProcessor->reg.SR |= shiftedVal == 0 ? SR_FLAG_ZERO : 0;
+			cyclesPassed = 6;
+			break;
 		case 0x4E: // absolute
+			origVal = pProcessor->memIf.read8(addrm_absolute(pProcessor));
+			pProcessor->reg.SR |= origVal & SR_FLAG_CARRY;
+			pProcessor->memIf.write8(addrm_absolute(pProcessor), origVal >> 1);
+			shiftedVal = pProcessor->memIf.read8(addrm_absolute(pProcessor));
+			pProcessor->reg.SR |= shiftedVal == 0 ? SR_FLAG_ZERO : 0;
+			cyclesPassed = 6;
+			break;
 		case 0x5E: // absolute,X
+			origVal = pProcessor->memIf.read8(addrm_absoluteXind(pProcessor));
+			pProcessor->reg.SR |= origVal & SR_FLAG_CARRY;
+			pProcessor->memIf.write8(addrm_absoluteXind(pProcessor), origVal >> 1);
+			shiftedVal = pProcessor->memIf.read8(addrm_absoluteXind(pProcessor));
+			pProcessor->reg.SR |= shiftedVal == 0 ? SR_FLAG_ZERO : 0;
+			cyclesPassed = 7;
+			break;
+		default:
 			return 0xFF;
 	}
 
@@ -1706,7 +1565,6 @@ U8 mos6502_LXA(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -1734,7 +1592,6 @@ U8 mos6502_NOP(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -1762,7 +1619,6 @@ U8 mos6502_ORA(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -1790,18 +1646,8 @@ U8 mos6502_PHA(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	addrm_stackPush8(pProcessor, pProcessor->reg.AC);
-
-	OP_PRINT(
-		printf(
-			"\tStored Accumulator %d (0x%02X) to stack. SP=0x%04X\n\n",
-			pProcessor->reg.AC,
-			pProcessor->reg.AC,
-			pProcessor->reg.SP + 0x100
-		)
-	);
 
 	cyclesPassed = 3;
 
@@ -1826,7 +1672,6 @@ U8 mos6502_PHP(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -1854,7 +1699,6 @@ U8 mos6502_PLA(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	pProcessor->reg.SR &= ~(SR_FLAG_NEGATIVE | SR_FLAG_ZERO);
 
@@ -1862,17 +1706,6 @@ U8 mos6502_PLA(
 
 	pProcessor->reg.SR |= pProcessor->reg.AC & SR_FLAG_NEGATIVE;
 	pProcessor->reg.SR |= pProcessor->reg.AC == 0 ? SR_FLAG_ZERO : 0;
-
-	OP_PRINT(
-		printf(
-			"\tPulled Accumulator %d (0x%02X) from stack. SP=0x%04X. %s%s\n\n",
-			pProcessor->reg.AC,
-			pProcessor->reg.AC,
-			pProcessor->reg.SP + 0x100,
-			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? "N " : "",
-			pProcessor->reg.SR & SR_FLAG_ZERO ? "Z " : ""
-		)
-	);
 
 	cyclesPassed = 4;
 
@@ -1897,7 +1730,6 @@ U8 mos6502_PLP(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -1925,7 +1757,6 @@ U8 mos6502_RLA(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -1953,7 +1784,6 @@ U8 mos6502_ROL(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -1981,7 +1811,6 @@ U8 mos6502_ROR(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2009,7 +1838,6 @@ U8 mos6502_RRA(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2037,7 +1865,6 @@ U8 mos6502_RTI(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2065,20 +1892,11 @@ U8 mos6502_RTS(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	pProcessor->reg.PC = addrm_stackPop16(pProcessor);
 	
 	cyclesPassed = 6;
 
-	OP_PRINT(
-		printf(
-			"\tPopped return address 0x%04X (+ 1) from the stack. SP=0x%04X\n\n",
-			pProcessor->reg.PC,
-			pProcessor->reg.SP
-		)
-	);
-	
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
 	return cyclesPassed;
@@ -2100,7 +1918,6 @@ U8 mos6502_SAX(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2130,7 +1947,6 @@ U8 mos6502_SBC(
 	U8 memValue = 0;
 	U8 tempAc = pProcessor->reg.AC;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	// TODO implement decimal mode (BCD)
 	switch (opCode) {
@@ -2138,12 +1954,14 @@ U8 mos6502_SBC(
 			memValue = pProcessor->memIf.read8(addrm_zeropage(pProcessor));
 			cyclesPassed = 3;
 			break;
-		case 0xED: {// absolute
+		case 0xED: // absolute
 			memValue = pProcessor->memIf.read8(addrm_absolute(pProcessor));
 			cyclesPassed = 4;
 			break;
-		}
 		case 0xE9: // immediate
+			memValue = pProcessor->memIf.read8(addrm_immediate(pProcessor));
+			cyclesPassed = 4;
+			break;
 		case 0xF5: // zeropage,X
 		case 0xFD: // absolute,X
 		case 0xF9: // absolute,Y
@@ -2170,25 +1988,6 @@ U8 mos6502_SBC(
 	pProcessor->reg.SR |= pProcessor->reg.AC & SR_FLAG_NEGATIVE;
 	pProcessor->reg.SR |= pProcessor->reg.AC == 0 ? SR_FLAG_ZERO : 0;
 	
-	OP_PRINT(
-		printf(
-			"\tSubtracted value %d/%d/0x%02X from Accumulator (%d/%d/0x%02X), result: %d/%d/0x%02X. %s%s%s%s\n\n",
-			memValue,
-			(I8)memValue,
-			memValue,
-			tempAc,
-			(I8)tempAc,
-			tempAc,
-			pProcessor->reg.AC,
-			(I8)pProcessor->reg.AC,
-			pProcessor->reg.AC,
-			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? "N " : "",
-			pProcessor->reg.SR & SR_FLAG_ZERO ? "Z " : "",
-			pProcessor->reg.SR & SR_FLAG_CARRY ? "C " : "",
-			pProcessor->reg.SR & SR_FLAG_OVERFLOW ? "O " : ""
-		)
-	);
-	
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
 	return cyclesPassed;
@@ -2210,7 +2009,6 @@ U8 mos6502_SBX(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2238,7 +2036,6 @@ U8 mos6502_SEC(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2266,7 +2063,6 @@ U8 mos6502_SED(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2294,7 +2090,6 @@ U8 mos6502_SEI(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2322,7 +2117,6 @@ U8 mos6502_SHA(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2350,7 +2144,6 @@ U8 mos6502_SHX(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2378,7 +2171,6 @@ U8 mos6502_SHY(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2406,7 +2198,6 @@ U8 mos6502_SLO(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2434,7 +2225,6 @@ U8 mos6502_SRE(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2462,7 +2252,6 @@ U8 mos6502_STA(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	U16 destAddr;
 
@@ -2479,26 +2268,14 @@ U8 mos6502_STA(
 			destAddr = addrm_indirectIndexed(pProcessor);
 			cyclesPassed = 6;
 			break;
-		case 0x9D: // absolute,X
-			destAddr = addrm_absoluteXind(pProcessor);
-			cyclesPassed = 5;
-			break;
 		case 0x81: // (indirect,X)
 		case 0x95: // zeropage,X
 		case 0x99: // absolute,Y
+		case 0x9D: // absolute,X
 			return 0xFF;
 	}
 
 	pProcessor->memIf.write8(destAddr, pProcessor->reg.AC);
-
-	OP_PRINT(
-		printf(
-			"\tStored Accumulator (%d / 0x%02X) in memory address 0x%04X\n\n",
-			pProcessor->reg.AC,
-			pProcessor->reg.AC,
-			destAddr
-		)
-	);
 
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -2521,7 +2298,6 @@ U8 mos6502_STX(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2550,7 +2326,6 @@ U8 mos6502_STY(
 	U8 cyclesPassed = 0;
 	U16 address = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		case 0x84: // zeropage
@@ -2562,15 +2337,6 @@ U8 mos6502_STY(
 		case 0x94: // zeropage,X
 			return 0xFF;
 	}
-
-	OP_PRINT(
-		printf(
-			"\tStored Index Y value %d (0x%02X) to memory location 0x%04X\n\n",
-			pProcessor->reg.Y,
-			pProcessor->reg.Y,
-			address
-		)
-	);
 
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -2593,7 +2359,6 @@ U8 mos6502_TAS(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2621,7 +2386,6 @@ U8 mos6502_TAX(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	pProcessor->reg.SR &= ~(SR_FLAG_NEGATIVE | SR_FLAG_ZERO);
 
@@ -2631,16 +2395,6 @@ U8 mos6502_TAX(
 
 	pProcessor->reg.SR |= pProcessor->reg.X & SR_FLAG_NEGATIVE;
 	pProcessor->reg.SR |= pProcessor->reg.X == 0 ? SR_FLAG_ZERO : 0;
-
-	OP_PRINT(
-		printf(
-			"\tTransferred Accumulator (%d/0x%02X) to Index X. %s%s\n\n",
-			pProcessor->reg.AC,
-			pProcessor->reg.AC,
-			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? "N ": "",
-			pProcessor->reg.SR & SR_FLAG_ZERO ? "Z ": ""
-		)
-	);
 
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -2663,7 +2417,6 @@ U8 mos6502_TAY(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	pProcessor->reg.SR &= ~(SR_FLAG_ZERO | SR_FLAG_NEGATIVE);
 
@@ -2674,16 +2427,6 @@ U8 mos6502_TAY(
 	pProcessor->reg.SR |= pProcessor->reg.AC == 0 ? SR_FLAG_ZERO : 0;
 	
 	cyclesPassed = 2;
-
-	OP_PRINT(
-		printf(
-			"\tTransferred value %d (0x%02X) from Accumulator to Index Y. %s%s\n\n",
-			pProcessor->reg.Y,
-			pProcessor->reg.Y,
-			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? "N " : "",
-			pProcessor->reg.SR & SR_FLAG_ZERO ? "Z " : ""
-		)
-	);
 
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -2706,7 +2449,6 @@ U8 mos6502_TSX(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2734,7 +2476,6 @@ U8 mos6502_TXA(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2762,7 +2503,6 @@ U8 mos6502_TXS(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:
@@ -2790,7 +2530,6 @@ U8 mos6502_TYA(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	pProcessor->reg.SR &= ~(SR_FLAG_NEGATIVE | SR_FLAG_ZERO);
 
@@ -2800,16 +2539,6 @@ U8 mos6502_TYA(
 	pProcessor->reg.SR |= pProcessor->reg.AC == 0 ? SR_FLAG_ZERO : 0;
 
 	cyclesPassed = 2;
-
-	OP_PRINT(
-		printf(
-			"\tTransferred value %d (0x%02X) from Index Y to Accumulator. %s%s\n\n",
-			pProcessor->reg.AC,
-			pProcessor->reg.AC,
-			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? "N " : "",
-			pProcessor->reg.SR & SR_FLAG_ZERO ? "Z " : ""
-		)
-	);
 
 	pProcessor->reg.PC += pOpCodeData->bytes;
 
@@ -2832,7 +2561,6 @@ U8 mos6502_USBC(
 
 	U8 cyclesPassed = 0;
 
-	OP_PRINT(DBG_FN_PRINT);
 
 	switch (opCode) {
 		default:

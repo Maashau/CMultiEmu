@@ -11,27 +11,23 @@
 /*******************************************************************************
 * Operand is an immediate byte in the memory.
 *
-* Return: Value -> (U8)memory[PC + 1]
+* Return: Value -> (U16)PC + 1
 *******************************************************************************/
-mos6502_imm addrm_immediate(
+mos6502_addr addrm_immediate(
 	mos6502_processor_st *	pProcessor
 ) {
-	OP_PRINT(printf("\t%s\n", __FUNCTION__));
-
-	return pProcessor->memIf.read8(pProcessor->reg.PC + 1);
+	return pProcessor->reg.PC + 1;
 }
 
 /*******************************************************************************
 * Operand is an immediate unsigned byte in the memory.
 *
-* Return: Value -> (I8)memory[PC + 1]
+* Return: Value -> (U16)PC + (U8)memory[PC + 1]
 *******************************************************************************/
-mos6502_rel addrm_relative(
+mos6502_addr addrm_relative(
 	mos6502_processor_st *	pProcessor
 ) {
-	OP_PRINT(printf("\t%s\n", __FUNCTION__));
-
-	return pProcessor->memIf.read8(pProcessor->reg.PC + 1);
+	return pProcessor->reg.PC + (I8)pProcessor->memIf.read8(pProcessor->reg.PC + 1);
 }
 
 /*******************************************************************************
@@ -42,8 +38,6 @@ mos6502_rel addrm_relative(
 mos6502_addr addrm_absolute(
 	mos6502_processor_st *	pProcessor
 ) {
-	OP_PRINT(printf("\t%s\n", __FUNCTION__));
-
 	return pProcessor->memIf.read16(pProcessor->reg.PC + 1);
 }
 
@@ -55,8 +49,6 @@ mos6502_addr addrm_absolute(
 mos6502_addr addrm_absoluteXind(
 	mos6502_processor_st *	pProcessor
 ) {
-	OP_PRINT(printf("\t%s\n", __FUNCTION__));
-
 	return pProcessor->memIf.read16(pProcessor->reg.PC + 1) + pProcessor->reg.X;
 }
 
@@ -68,8 +60,6 @@ mos6502_addr addrm_absoluteXind(
 mos6502_addr addrm_absoluteYind(
 	mos6502_processor_st *	pProcessor
 ) {	
-	OP_PRINT(printf("\t%s\n", __FUNCTION__));
-
 	return pProcessor->memIf.read16(pProcessor->reg.PC + 1) + pProcessor->reg.Y;
 }
 
@@ -81,11 +71,7 @@ mos6502_addr addrm_absoluteYind(
 mos6502_addr addrm_zeropage(
 	mos6502_processor_st *	pProcessor
 ) {
-	U8 address = pProcessor->memIf.read8(pProcessor->reg.PC + 1);
-	
-	OP_PRINT(printf("\t%s\n", __FUNCTION__));
-	
-	return (mos6502_addr)address;
+	U8 address = pProcessor->memIf.read8(pProcessor->reg.PC + 1);		return (mos6502_addr)address;
 }
 
 /*******************************************************************************
@@ -97,8 +83,6 @@ mos6502_addr addrm_zeropageXind(
 	mos6502_processor_st *	pProcessor
 ) {
 	U8 address = pProcessor->memIf.read8(pProcessor->reg.PC + 1) + pProcessor->reg.X;
-
-	OP_PRINT(printf("\t%s\n", __FUNCTION__));
 
 	return (mos6502_addr)address;
 }
@@ -112,8 +96,6 @@ mos6502_addr addrm_zeropageYind(
 	mos6502_processor_st *	pProcessor
 ) {
 	U8 address = pProcessor->memIf.read8(pProcessor->reg.PC + 1) + pProcessor->reg.Y;
-
-	OP_PRINT(printf("\t%s\n", __FUNCTION__));
 	
 	return (mos6502_addr)address;
 }
@@ -127,8 +109,6 @@ mos6502_addr addrm_indirect(
 	mos6502_processor_st *	pProcessor
 ) {
 	U16 indAddress = pProcessor->memIf.read16(pProcessor->reg.PC + 1);
-
-	OP_PRINT(printf("\t%s\n", __FUNCTION__));
 	
 	return pProcessor->memIf.read16(indAddress);
 }
@@ -142,8 +122,6 @@ mos6502_addr addrm_indexedIndirect(
 	mos6502_processor_st *	pProcessor
 ) {
 	U8 indAddress = pProcessor->memIf.read8(pProcessor->reg.PC + 1) + pProcessor->reg.X;
-
-	OP_PRINT(printf("\t%s\n", __FUNCTION__));
 	
 	return pProcessor->memIf.read16(indAddress);
 }
@@ -158,8 +136,6 @@ mos6502_addr addrm_indirectIndexed(
 ) {
 	U8 indAddress = pProcessor->memIf.read8(pProcessor->reg.PC + 1);
 	U16 address = pProcessor->memIf.read16(indAddress) + pProcessor->reg.Y;
-
-	OP_PRINT(printf("\t%s\n", __FUNCTION__));
 
 	return address;
 }
