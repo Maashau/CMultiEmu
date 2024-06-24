@@ -16,7 +16,11 @@
 mos6502_addr addrm_immediate(
 	mos6502_processor_st *	pProcessor
 ) {
-	return pProcessor->reg.PC + 1;
+	mos6502_addr retAddr = pProcessor->reg.PC;
+
+	pProcessor->reg.PC++;
+
+	return retAddr;
 }
 
 /*******************************************************************************
@@ -27,7 +31,10 @@ mos6502_addr addrm_immediate(
 mos6502_addr addrm_relative(
 	mos6502_processor_st *	pProcessor
 ) {
-	return pProcessor->reg.PC + (I8)pProcessor->memIf.read8(pProcessor->reg.PC + 1);
+	I8 offset = (I8)pProcessor->memIf.read8(addrm_immediate(pProcessor));
+	mos6502_addr retAddr = pProcessor->reg.PC + offset;
+
+	return retAddr;
 }
 
 /*******************************************************************************
@@ -38,7 +45,11 @@ mos6502_addr addrm_relative(
 mos6502_addr addrm_absolute(
 	mos6502_processor_st *	pProcessor
 ) {
-	return pProcessor->memIf.read16(pProcessor->reg.PC + 1);
+	mos6502_addr retAddr = pProcessor->memIf.read16(pProcessor->reg.PC);
+
+	pProcessor->reg.PC += 2;
+
+	return retAddr;
 }
 
 /*******************************************************************************
@@ -49,7 +60,11 @@ mos6502_addr addrm_absolute(
 mos6502_addr addrm_absoluteXind(
 	mos6502_processor_st *	pProcessor
 ) {
-	return pProcessor->memIf.read16(pProcessor->reg.PC + 1) + pProcessor->reg.X;
+	mos6502_addr retAddr = pProcessor->memIf.read16(pProcessor->reg.PC) + pProcessor->reg.X;
+
+	pProcessor->reg.PC += 2;
+
+	return retAddr;
 }
 
 /*******************************************************************************
@@ -60,7 +75,11 @@ mos6502_addr addrm_absoluteXind(
 mos6502_addr addrm_absoluteYind(
 	mos6502_processor_st *	pProcessor
 ) {	
-	return pProcessor->memIf.read16(pProcessor->reg.PC + 1) + pProcessor->reg.Y;
+	mos6502_addr retAddr = pProcessor->memIf.read16(pProcessor->reg.PC) + pProcessor->reg.Y;
+
+	pProcessor->reg.PC += 2;
+
+	return retAddr;
 }
 
 /*******************************************************************************
@@ -71,7 +90,11 @@ mos6502_addr addrm_absoluteYind(
 mos6502_addr addrm_zeropage(
 	mos6502_processor_st *	pProcessor
 ) {
-	U8 address = pProcessor->memIf.read8(pProcessor->reg.PC + 1);		return (mos6502_addr)address;
+	U8 address = pProcessor->memIf.read8(pProcessor->reg.PC);
+	
+	pProcessor->reg.PC++;
+	
+	return (mos6502_addr)address;
 }
 
 /*******************************************************************************
@@ -82,7 +105,9 @@ mos6502_addr addrm_zeropage(
 mos6502_addr addrm_zeropageXind(
 	mos6502_processor_st *	pProcessor
 ) {
-	U8 address = pProcessor->memIf.read8(pProcessor->reg.PC + 1) + pProcessor->reg.X;
+	U8 address = pProcessor->memIf.read8(pProcessor->reg.PC) + pProcessor->reg.X;
+
+	pProcessor->reg.PC++;
 
 	return (mos6502_addr)address;
 }
@@ -95,7 +120,9 @@ mos6502_addr addrm_zeropageXind(
 mos6502_addr addrm_zeropageYind(
 	mos6502_processor_st *	pProcessor
 ) {
-	U8 address = pProcessor->memIf.read8(pProcessor->reg.PC + 1) + pProcessor->reg.Y;
+	U8 address = pProcessor->memIf.read8(pProcessor->reg.PC) + pProcessor->reg.Y;
+	
+	pProcessor->reg.PC++;
 	
 	return (mos6502_addr)address;
 }
@@ -108,8 +135,10 @@ mos6502_addr addrm_zeropageYind(
 mos6502_addr addrm_indirect(
 	mos6502_processor_st *	pProcessor
 ) {
-	U16 indAddress = pProcessor->memIf.read16(pProcessor->reg.PC + 1);
+	U16 indAddress = pProcessor->memIf.read16(pProcessor->reg.PC);
 	
+	pProcessor->reg.PC += 2;
+
 	return pProcessor->memIf.read16(indAddress);
 }
 
@@ -121,8 +150,10 @@ mos6502_addr addrm_indirect(
 mos6502_addr addrm_indexedIndirect(
 	mos6502_processor_st *	pProcessor
 ) {
-	U8 indAddress = pProcessor->memIf.read8(pProcessor->reg.PC + 1) + pProcessor->reg.X;
+	U8 indAddress = pProcessor->memIf.read8(pProcessor->reg.PC) + pProcessor->reg.X;
 	
+	pProcessor->reg.PC++;
+
 	return pProcessor->memIf.read16(indAddress);
 }
 
@@ -134,9 +165,11 @@ mos6502_addr addrm_indexedIndirect(
 mos6502_addr addrm_indirectIndexed(
 	mos6502_processor_st *	pProcessor
 ) {
-	U8 indAddress = pProcessor->memIf.read8(pProcessor->reg.PC + 1);
-	U16 address = pProcessor->memIf.read16(indAddress) + pProcessor->reg.Y;
+	U8 indAddress = pProcessor->memIf.read8(pProcessor->reg.PC);
+	mos6502_addr address = pProcessor->memIf.read16(indAddress) + pProcessor->reg.Y;
 
+	pProcessor->reg.PC++;
+	
 	return address;
 }
 

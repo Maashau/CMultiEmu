@@ -167,6 +167,8 @@ int main(void) {
 		}
 
 		totalOperations++;
+
+		//getc(stdin);
 	}
 	clock_gettime(CLOCK_REALTIME, &eT);
 
