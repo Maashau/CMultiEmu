@@ -1,146 +1,54 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 #include "6502.h"
 
 #define PRG_STORE_TO_MEM	0
 #define PRG_CLEAR_MEM		1
 #define PRG_WEEKDAY			2
-#define PRG_BBL_SORT		3
 
 #define program PRG_WEEKDAY
+
+typedef enum {
+	mos6502_BIN,
+	mos6502_HEX,
+	mos6502_ASM
+} mos6502_fileType;
 
 U8 memRead8(U16 address);
 U16 memRead16(U16 address);
 void memWrite8(U16 address, U8 value);
 void memWrite16(U16 address, U16 value);
 
+void loadFile(U8 * memory, const char * path, mos6502_fileType fileType);
+
 U8 * ram;
 
+/*******************************************************************************
+* Handles loading and running the program.
+*
+* Returns: -
+*******************************************************************************/
 int main(void) {
 
-#if program == PRG_STORE_TO_MEM // write values to memory.
-	U8 memory[MOS6502_MEMSIZE] = {
-		0xA9, 0x01,			// LDA
-		0x8D, 0x00, 0x02,	// STA
-		0xA9, 0x05,			// LDA
-		0x8D, 0x01, 0x02,	// STA
-		0xA9, 0x08,			// LDA
-		0x8D, 0x02, 0x02,	// STA
-	};
+	U8 memory[MOS6502_MEMSIZE];
 
-	memory[0xFFFF] = 0x20;
-	memory[0xFFFE] = 0x80;
+#if program == PRG_STORE_TO_MEM // write values to memory.
+
+	loadFile(memory, "./prg/memWrite.6502", mos6502_BIN);
 
 #elif program == PRG_CLEAR_MEM // Clears X amount of memory from memory address (100), Y
-	U8 memory[MOS6502_MEMSIZE] = {
-		0xA2,	5,			// LDX
-		0xA9,	0x00,		// LDA
-		0xA8,				// TAY
-/*loop*/0x91,	100,		// STA
-		0xC8,				// INY
-		0xCA,				// DEX
-		0xD0,	-6,			// BNE loop
-		0
-	};
-	memory[255] = 0x4;
-	memory[254] = 0x3;
-	memory[253] = 0x2;
-	memory[252] = 0x1;
 
-	memory[100] = 252;
+	loadFile(memory, "./prg/memClear.6502", mos6502_BIN);
 
 #elif program == PRG_WEEKDAY // Day of the week. Y = year, X = month, AC = day
-	U8 memory[MOS6502_MEMSIZE] = {
-		/* Y = 120 (2020), X = 3 (MAR), A = 7 -- Should result in 6 (SAT)*/
-		0xA0, 0x78,
-		0xA2, 0x03,
-		0xA9, 0x07,
-		0x20, 0x0D, 0x00,
 
-		/* Inf loop */
-		0x0,//0xEA,
-		0x4C, 0x09, 0x00,
+	loadFile(memory, "./prg/weekday.6502", mos6502_BIN);
 
-		/* Weekday */
-		0xE0, 0x03,
-		0xB0, 0x01,
-		0x88,
-
-		/* Handle march */
-		0x49, 0x7F,
-		0xC0, 0xC8,
-		0x7D, 0x31, 0x00,
-		0x8D, 0x40, 0x00,
-		0x98,
-		0x20, 0x2D, 0x00,
-		0xED, 0x40, 0x00,
-		0x8D, 0x40, 0x00,
-		0x98,
-		0x4A,
-		0x4A,
-		0x18,
-		0x6D, 0x40, 0x00,
-
-		/* Modulo 7 */
-		0x69, 0x07,
-		0x90, 0xFC,
-
-		/* RTS */
-		0x60,
-
-		/* Storage */
-		0x01, 0x05, 0x06, 0x03, 0x01, 0x05, 0x03, 0x00, 0x04, 0x02, 0x06, 0x04
-	};
 	printf("Calculating weekday (from 1 to 7) for %d.%d.%d\n\n", memory[5], memory[3], memory[1] + 1900);
 
-#elif program == PRG_BBL_SORT
-	U8 memory[MOS6502_MEMSIZE] = {
-		/* Sort 8 */
-		0xA0, 0x00,
-		0x84, 0x32,
-		0xB1, 0x30,
-		0xAA,
-		0xC8,
-		0xCA,
-
-		/* Next element */
-		0xB1, 0x30,
-		0xC8,
-		0xD1, 0x30,
-		0x90, 0x10,
-		0xF0, 0x0E,
-		0x48,
-		0xB1, 0x30,
-		0x88,
-		0x91, 0x30,
-		0x68,
-		0xC8,
-		0x91, 0x30,
-		0xA9, 0xFF,
-		0x85, 0x32,
-
-		/* Check end of the list? */
-		0xCA,
-		0xD0, 0xE6,
-		0x24, 0x32,
-		0x30, 0xD9,
-		0x60
-	};
-
-	memory[0x30] = 0xE0;
-	memory[0x31] = 0x00;
-
-	memory[0xE0] = 3;
-	memory[0xE1] = 2;
-	memory[0xE2] = 1;
-	memory[0xE3] = 3;
-
-	printf("Starting order:\n");
-	for (int ii = 0; ii < memory[0xE0]; ii++) {
-		printf("\t%d: %d\n", ii + 1, memory[0xE0 + 1 + ii]);
-	}
-	printf("\n");
 #endif
+
 	ram = memory;
 
 	struct timespec sT, eT;
@@ -176,14 +84,6 @@ int main(void) {
 
 	printf("Answer: %d\n\n", processor.reg.AC);
 
-#elif program == PRG_BBL_SORT
-
-	printf("Final order:\n");
-	for (int ii = 0; ii < memory[0xE0]; ii++) {
-		printf("\t%d: %d\n", ii + 1, memory[0xE0 + 1 + ii]);
-	}
-	printf("\n");
-
 #endif
 
 	time_t secsPassed, nsecsPassed = 0;
@@ -216,17 +116,91 @@ int main(void) {
 	);
 }
 
+/*******************************************************************************
+* Loads binary from given path.
+*
+* Arguments:
+*	pMemory - Pointer to a memory allocation.
+*	pPath	- Pointer to a file path.
+*	
+*
+* Returns: Nothing.
+*******************************************************************************/
+void loadFile(U8 * pMemory, const char * pPath, mos6502_fileType fileType) {
+	FILE * fpPrg;
 
-U8 memRead8(U16 address) {
+	fpPrg = fopen(pPath, "rb");
+
+	switch (fileType)
+	{
+	case mos6502_BIN:
+		break;
+	case mos6502_HEX:
+	case mos6502_ASM:
+		printf("Filetype not yet supported...\n");
+		exit(1);
+	}
+
+	for (int memIdx = 0; memIdx <= 0xFFFF; memIdx++) {
+		int tempByte = fgetc(fpPrg);
+
+		if (tempByte != EOF) {
+			pMemory[memIdx] = (U8)tempByte;
+		} else {
+			break;
+		}
+	}
+
+	fclose(fpPrg);
+}
+
+/*******************************************************************************
+* Reads one byte from the memory.
+*
+* Arguments:
+*	address - Memory address to read from.
+*
+* Returns: Byte read from the memory.
+*******************************************************************************/
+U8 memRead8(mos6502_addr address) {
 	return ram[address];
 }
-U16 memRead16(U16 address) {
+
+/*******************************************************************************
+* Reads an address(word) from the memory.
+*
+* Arguments:
+*	address - Memory address to read from.
+*
+* Returns: Address read from the memory.
+*******************************************************************************/
+mos6502_addr memRead16(mos6502_addr address) {
 	return ram[address] | (ram[address + 1] << 8);
 }
-void memWrite8(U16 address, U8 value) {
+
+/*******************************************************************************
+* Writes one byte to the memory.
+*
+* Arguments:
+*	address - Memory address to write to.
+*	value	- Byte to be written to the memory.
+*
+* Returns: Nothing.
+*******************************************************************************/
+void memWrite8(mos6502_addr address, U8 value) {
 	ram[address] = value;
 }
-void memWrite16(U16 address, U16 value) {
+
+/*******************************************************************************
+* Writes an address(word) to the memory.
+*
+* Arguments:
+*	address - Memory address to write to.
+*	value	- Address to be written to the memory.
+*
+* Returns: Nothing.
+*******************************************************************************/
+void memWrite16(mos6502_addr address, U16 value) {
 	ram[address] = (U8)value;
 	ram[address + 1] = (U8)(value >> 8);
 }

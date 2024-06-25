@@ -458,8 +458,7 @@ U8 mos6502_BRK(
 
 	// TODO
 
-	return 0xFF;
-	exit(0);
+	return 7;
 
 	return cyclesPassed;
 }

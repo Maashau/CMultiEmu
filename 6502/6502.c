@@ -4,6 +4,7 @@
 * 6502 processor emulator.
 *******************************************************************************/
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "6502_opc.h"
 
@@ -266,8 +267,21 @@ opCode_st mos6502_opCodes[] = {
 /* 255,0xFF */	{mos6502_ISC,	"ISC",	ABX,	3}	// abs, X
 };
 
+void printCurrOp(
+	mos6502_processor_st *	pProcessor,
+	mos6502_addrm			programCounter,
+	U8						opCode,
+	U8 *					operands,
+	U8						cycles
+);
+
 /*******************************************************************************
 * Initialize the processor.
+*
+* Arguments:
+*	pProcessor - Pointer to a processor data structure.
+*
+* Returns: Nothing
 *******************************************************************************/
 void mos6502_init(mos6502_processor_st * pProcessor) {
 	pProcessor->reg.PC = 0;
@@ -276,28 +290,136 @@ void mos6502_init(mos6502_processor_st * pProcessor) {
 	pProcessor->reg.Y = 0;
 	pProcessor->reg.SR = SR_FLAG_UNUSED | SR_FLAG_BREAK | SR_FLAG_IRQ;
 	pProcessor->reg.SP = 0xFF;
-	OP_PRINT(printf("\033[4m addr op asm  |AC XR YR SP|nvdizc|cycles(tot) \033[m\n"));
+	OP_PRINT(printf("                                  |  Registers  | Flags  |              \n"));
+	OP_PRINT(printf("\033[4m| ADDR | OP       | ASM           | AC XR YR SP | NVDIZC | Cycles (Tot)\033[m\n"));
 }
 
 /*******************************************************************************
 * Handle next instruction
 *
-* Return: Cycles elapsed
+* Arguments:
+*	pProcessor - Pointer to a processor data structure.
+*
+* Returns: Cycles elapsed
 *******************************************************************************/
 U8 mos6502_handleOp(mos6502_processor_st * pProcessor) {
+	
 	mos6502_addr oldPC = pProcessor->reg.PC;
+	U8 operands[2];
 
+	/* Read operands for debug printing. */
+	operands[0] = pProcessor->memIf.read8(pProcessor->reg.PC + 1);
+	operands[1] = pProcessor->memIf.read8(pProcessor->reg.PC + 2);
+
+	/* Handle instruction. */
 	U8 opCode = pProcessor->memIf.read8(addrm_immediate(pProcessor));
-
 	U8 retCode = mos6502_opCodes[opCode].handler(pProcessor, opCode);
-
 	pProcessor->cycleCount += retCode;
 
+	OP_PRINT(printCurrOp(pProcessor, oldPC, opCode, operands, retCode));
+	
+	if (retCode == 0xFF) {
+		printf("\n\nNon-implemented op-code (%x)\n\n", opCode);
+		//exit(1);
+	} else if (opCode == 0) {
+		printf("\n\nBreak hit at 0x%04X.\n\n", oldPC);
+		return 0xFF;
+	}
+
+	return retCode;
+}
+
+/*******************************************************************************
+* Prints information of current operation.
+*
+* Arguments:
+*	pProcessor	- Pointer to a processor data structure.
+*	PC			- Program counter value for printed operation.
+*	opCode		- Numeric value representing the op code.
+*	operBytes	- Operand bytes for current operation.
+*	cycles		- Count of cycles passed during current operation.
+*
+* Returns: Nothing
+*******************************************************************************/
+void printCurrOp(
+	mos6502_processor_st *	pProcessor,
+	mos6502_addrm			PC,
+	U8						opCode,
+	U8 *					operBytes,
+	U8						cycles
+) {
+	char * asmOperand = calloc(9, sizeof(char));
+	U8 operands[4];
+
+	operands[0] = operBytes[0] >> 4;
+	operands[1] = operBytes[0] & 0xF;
+	operands[2] = operBytes[1] >> 4;
+	operands[3] = operBytes[1] & 0xF;
+
+	for (int operIdx = 0; operIdx < sizeof(operands); operIdx++) {
+		if (operands[operIdx] < 10) {
+			operands[operIdx] += '0';
+		} else {
+			operands[operIdx] += 'A' - 10;
+		}
+	}
+
+	switch (mos6502_opCodes[opCode].addrMode)
+	{
+		case ACC:
+			sprintf(asmOperand, " A      ");
+			break;
+		case ABS:
+			sprintf(
+				asmOperand, " $%c%c%c%c  ", operands[2], operands[3], operands[0], operands[1]);
+			break;
+		case ABX:
+			sprintf(asmOperand, " $%c%c%c%c,X", operands[2], operands[3], operands[0], operands[1]);
+			break;
+		case ABY:
+			sprintf(asmOperand, " $%c%c%c%c,Y", operands[2], operands[3], operands[0], operands[1]);
+			break;
+		case IMM:
+			sprintf(asmOperand, "#$%c%c    ", operands[0], operands[1]);
+			break;
+		case IND:
+			sprintf(asmOperand, "($%c%c%c%c) ", operands[2], operands[3], operands[0], operands[1]);
+			break;
+		case INX:
+			sprintf(asmOperand, "($%c%c,X) ", operands[0], operands[1]);
+			break;
+		case INY:
+			sprintf(asmOperand, "($%c%c),Y ", operands[0], operands[1]);
+			break;
+		case REL:
+			sprintf(asmOperand, "  %-6d", operands[0], operands[1]);
+			break;
+		case ZPG:
+			sprintf(asmOperand, " $%c%c    ", operands[0], operands[1]);
+			break;
+		case ZPX:
+			sprintf(asmOperand, " $%c%c,X  ", operands[0], operands[1]);
+			break;
+		case ZPY:
+			sprintf(asmOperand, " $%c%c,Y ", operands[0], operands[1]);
+			break;
+		
+		case NON:
+		case IMP:
+			sprintf(asmOperand, "        ");
+			break;
+	}
+
 	OP_PRINT(
-		printf(" %04X %02X %-4s |%02X %02X %02X %02X|%d%d%d%d%d%d|%3d (%llu)\n",
-			oldPC,
+		printf("| %04X | %02X %c%c %c%c | %-4s %s | %02X %02X %02X %02X | %d%d%d%d%d%d | %3d (%llu)\n",
+			PC,
 			opCode,
+			mos6502_opCodes[opCode].bytes > 1 ? operands[0] : ' ',
+			mos6502_opCodes[opCode].bytes > 1 ? operands[1] : ' ',
+			mos6502_opCodes[opCode].bytes > 2 ? operands[2] : ' ',
+			mos6502_opCodes[opCode].bytes > 2 ? operands[3] : ' ',
 			mos6502_opCodes[opCode].mnemonic,
+			asmOperand,
 			pProcessor->reg.AC,
 			pProcessor->reg.X,
 			pProcessor->reg.Y,
@@ -308,15 +430,8 @@ U8 mos6502_handleOp(mos6502_processor_st * pProcessor) {
 			pProcessor->reg.SR & SR_FLAG_IRQ ? 1 : 0,
 			pProcessor->reg.SR & SR_FLAG_ZERO ? 1 : 0,
 			pProcessor->reg.SR & SR_FLAG_CARRY ? 1 : 0,
-			retCode,
+			cycles,
 			pProcessor->cycleCount
 		)
 	);
-	
-	if (retCode == 0xFF) {
-		printf("\n\nNon-implemented op-code (%x)\n\n", opCode);
-		//exit(1);
-	}
-
-	return retCode;
 }

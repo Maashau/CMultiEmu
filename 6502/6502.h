@@ -30,10 +30,10 @@ typedef struct {
 	U8 SP;
 } mos6502_reg_st;
 
-typedef U8 (*mos6502_memRead8)(U16 address);
-typedef U16 (*mos6502_memRead16)(U16 address);
-typedef void (*mos6502_memWrite8)(U16 address, U8 value);
-typedef void (*mos6502_memWrite16)(U16 address, U16 value);
+typedef U8				(*mos6502_memRead8)(mos6502_addr address);
+typedef mos6502_addr	(*mos6502_memRead16)(mos6502_addr address);
+typedef void			(*mos6502_memWrite8)(mos6502_addr address, U8 value);
+typedef void			(*mos6502_memWrite16)(mos6502_addr address, U16 value);
 
 typedef struct {
 	mos6502_memRead8	read8;
