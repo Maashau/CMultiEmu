@@ -1,21 +1,4 @@
-#include "6502.h"
-
-typedef enum {
-	NON,	// none (JAMs)
-	IMP,	// implied
-	ACC,	// accumulator
-	IMM,	// immediate
-	REL,	// relative
-	ABS,	// absolute
-	ABX,	// absoluteXind
-	ABY,	// absoluteYind
-	ZPG,	// zeropage
-	ZPX,	// zeropageXind
-	ZPY,	// zeropageYind
-	IND,	// indirect
-	INX,	// indexedIndirect
-	INY 	// indirectIndexed
-} mos6502_addrm;
+#include "6502_types.h"
 
 mos6502_addr addrm_immediate(mos6502_processor_st * processor);
 mos6502_addr addrm_relative(mos6502_processor_st * processor);

@@ -33,17 +33,19 @@ int main(void) {
 
 	U8 memory[MOS6502_MEMSIZE];
 
+	//mos6502_assemble("./prg/asm/32bitdiv.6502asm", ram);
+
 #if program == PRG_STORE_TO_MEM // write values to memory.
 
-	loadFile(memory, "./prg/memWrite.6502", mos6502_BIN);
+	loadFile(memory, "./prg/bin/memWrite.6502", mos6502_BIN);
 
 #elif program == PRG_CLEAR_MEM // Clears X amount of memory from memory address (100), Y
 
-	loadFile(memory, "./prg/memClear.6502", mos6502_BIN);
+	loadFile(memory, "./prg/bin/memClear.6502", mos6502_BIN);
 
 #elif program == PRG_WEEKDAY // Day of the week. Y = year, X = month, AC = day
 
-	loadFile(memory, "./prg/weekday.6502", mos6502_BIN);
+	loadFile(memory, "./prg/bin/weekday.6502", mos6502_BIN);
 
 	printf("Calculating weekday (from 1 to 7) for %d.%d.%d\n\n", memory[5], memory[3], memory[1] + 1900);
 

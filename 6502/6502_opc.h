@@ -1,17 +1,4 @@
-#include "6502.h"
-#include "6502_addrm.h"
-
-#ifndef FILE_6502_OPC_H
-#define FILE_6502_OPC_H
-
-typedef U8 (*opFn)(mos6502_processor_st * processor, U8 opCodeIndex);
-
-typedef struct {
-	opFn handler;
-	char * mnemonic;
-	mos6502_addrm addrMode;
-	U8 bytes;
-} opCode_st;
+#include "6502_types.h"
 
 U8 mos6502_ADC(mos6502_processor_st * processor, U8 opCode);
 U8 mos6502_ALR(mos6502_processor_st * processor, U8 opCode);
@@ -90,5 +77,3 @@ U8 mos6502_TXA(mos6502_processor_st * processor, U8 opCode);
 U8 mos6502_TXS(mos6502_processor_st * processor, U8 opCode);
 U8 mos6502_TYA(mos6502_processor_st * processor, U8 opCode);
 U8 mos6502_USBC(mos6502_processor_st * processor, U8 opCode);
-
-#endif

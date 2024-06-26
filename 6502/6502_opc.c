@@ -7,7 +7,8 @@
 #include <stdlib.h>
 
 #include "6502.h"
-#include "6502_opc.h"
+//#include "6502_opc.h"
+#include "6502_addrm.h"
 
 /*******************************************************************************
 * Add Memory to Accumulator with Carry.

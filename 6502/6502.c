@@ -6,9 +6,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "6502.h"
 #include "6502_opc.h"
+#include "6502_addrm.h"
 
-opCode_st mos6502_opCodes[] = {
+opCode_st mos6502__opCodes[] = {
 /*  0,0x00 */	{mos6502_BRK,	"BRK",	IMP,	2},	// impl
 /*  1,0x01 */	{mos6502_ORA,	"ORA",	INX,	2},	// X, ind
 /*  2,0x02 */	{mos6502_JAM,	"JAM",	NON,	1},	// none
@@ -313,7 +315,7 @@ U8 mos6502_handleOp(mos6502_processor_st * pProcessor) {
 
 	/* Handle instruction. */
 	U8 opCode = pProcessor->memIf.read8(addrm_immediate(pProcessor));
-	U8 retCode = mos6502_opCodes[opCode].handler(pProcessor, opCode);
+	U8 retCode = mos6502__opCodes[opCode].handler(pProcessor, opCode);
 	pProcessor->cycleCount += retCode;
 
 	OP_PRINT(printCurrOp(pProcessor, oldPC, opCode, operands, retCode));
@@ -364,7 +366,7 @@ void printCurrOp(
 		}
 	}
 
-	switch (mos6502_opCodes[opCode].addrMode)
+	switch (mos6502__opCodes[opCode].addrMode)
 	{
 		case ACC:
 			sprintf(asmOperand, " A      ");
@@ -414,11 +416,11 @@ void printCurrOp(
 		printf("| %04X | %02X %c%c %c%c | %-4s %s | %02X %02X %02X %02X | %d%d%d%d%d%d | %3d (%llu)\n",
 			PC,
 			opCode,
-			mos6502_opCodes[opCode].bytes > 1 ? operands[0] : ' ',
-			mos6502_opCodes[opCode].bytes > 1 ? operands[1] : ' ',
-			mos6502_opCodes[opCode].bytes > 2 ? operands[2] : ' ',
-			mos6502_opCodes[opCode].bytes > 2 ? operands[3] : ' ',
-			mos6502_opCodes[opCode].mnemonic,
+			mos6502__opCodes[opCode].bytes > 1 ? operands[0] : ' ',
+			mos6502__opCodes[opCode].bytes > 1 ? operands[1] : ' ',
+			mos6502__opCodes[opCode].bytes > 2 ? operands[2] : ' ',
+			mos6502__opCodes[opCode].bytes > 2 ? operands[3] : ' ',
+			mos6502__opCodes[opCode].mnemonic,
 			asmOperand,
 			pProcessor->reg.AC,
 			pProcessor->reg.X,
