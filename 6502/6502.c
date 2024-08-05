@@ -290,10 +290,10 @@ void mos6502_init(mos6502_processor_st * pProcessor) {
 	pProcessor->reg.AC = 0;
 	pProcessor->reg.X = 0;
 	pProcessor->reg.Y = 0;
-	pProcessor->reg.SR = SR_FLAG_UNUSED | SR_FLAG_BREAK | SR_FLAG_IRQ;
+	pProcessor->reg.SR = SR_FLAG_UNUSED | SR_FLAG_B | SR_FLAG_I;
 	pProcessor->reg.SP = 0xFF;
-	OP_PRINT(printf("                                  |  Registers  | Flags  |              \n"));
-	OP_PRINT(printf("\033[4m| ADDR | OP       | ASM           | AC XR YR SP | NVDIZC | Cycles (Tot)\033[m\n"));
+	DBG_PRINT(printf("                                  |  Registers  | Flags  |              \n"));
+	DBG_PRINT(printf("\033[4m| ADDR | OP       | ASM           | AC XR YR SP | NVDIZC | Cycles (Tot)\033[m\n"));
 }
 
 /*******************************************************************************
@@ -314,15 +314,16 @@ U8 mos6502_handleOp(mos6502_processor_st * pProcessor) {
 	operands[1] = pProcessor->memIf.read8(pProcessor->reg.PC + 2);
 
 	/* Handle instruction. */
-	U8 opCode = pProcessor->memIf.read8(addrm_immediate(pProcessor));
+	U8 opCode = pProcessor->memIf.read8(addrm_imm(pProcessor));
 	U8 retCode = mos6502__opCodes[opCode].handler(pProcessor, opCode);
 	pProcessor->cycleCount += retCode;
 
-	OP_PRINT(printCurrOp(pProcessor, oldPC, opCode, operands, retCode));
+	DBG_PRINT(printCurrOp(pProcessor, oldPC, opCode, operands, retCode));
 	
 	if (retCode == 0xFF) {
-		printf("\n\nNon-implemented op-code (%x)\n\n", opCode);
-		//exit(1);
+		printf("\n\nNon-implemented op-code %s (0x%02X)\n\n", mos6502__opCodes[opCode].mnemonic, opCode);
+	} else if (retCode == 0xFE) {
+		printf("\n\nProcessor %s by op-code 0x%02X\n\n", mos6502__opCodes[opCode].mnemonic, opCode);
 	} else if (opCode == 0) {
 		printf("\n\nBreak hit at 0x%04X.\n\n", oldPC);
 		return 0xFF;
@@ -394,7 +395,7 @@ void printCurrOp(
 			sprintf(asmOperand, "($%c%c),Y ", operands[0], operands[1]);
 			break;
 		case REL:
-			sprintf(asmOperand, "  %-6d", operands[0], operands[1]);
+			sprintf(asmOperand, "  %-6d", (signed char)operBytes[0]);
 			break;
 		case ZPG:
 			sprintf(asmOperand, " $%c%c    ", operands[0], operands[1]);
@@ -403,7 +404,7 @@ void printCurrOp(
 			sprintf(asmOperand, " $%c%c,X  ", operands[0], operands[1]);
 			break;
 		case ZPY:
-			sprintf(asmOperand, " $%c%c,Y ", operands[0], operands[1]);
+			sprintf(asmOperand, " $%c%c,Y  ", operands[0], operands[1]);
 			break;
 		
 		case NON:
@@ -412,7 +413,7 @@ void printCurrOp(
 			break;
 	}
 
-	OP_PRINT(
+	DBG_PRINT(
 		printf("| %04X | %02X %c%c %c%c | %-4s %s | %02X %02X %02X %02X | %d%d%d%d%d%d | %3d (%llu)\n",
 			PC,
 			opCode,
@@ -426,12 +427,12 @@ void printCurrOp(
 			pProcessor->reg.X,
 			pProcessor->reg.Y,
 			pProcessor->reg.SP,
-			pProcessor->reg.SR & SR_FLAG_NEGATIVE ? 1 : 0,
-			pProcessor->reg.SR & SR_FLAG_OVERFLOW ? 1 : 0,
-			pProcessor->reg.SR & SR_FLAG_DECIMAL ? 1 : 0,
-			pProcessor->reg.SR & SR_FLAG_IRQ ? 1 : 0,
-			pProcessor->reg.SR & SR_FLAG_ZERO ? 1 : 0,
-			pProcessor->reg.SR & SR_FLAG_CARRY ? 1 : 0,
+			pProcessor->reg.SR & SR_FLAG_N ? 1 : 0,
+			pProcessor->reg.SR & SR_FLAG_V ? 1 : 0,
+			pProcessor->reg.SR & SR_FLAG_D ? 1 : 0,
+			pProcessor->reg.SR & SR_FLAG_I ? 1 : 0,
+			pProcessor->reg.SR & SR_FLAG_Z ? 1 : 0,
+			pProcessor->reg.SR & SR_FLAG_C ? 1 : 0,
 			cycles,
 			pProcessor->cycleCount
 		)

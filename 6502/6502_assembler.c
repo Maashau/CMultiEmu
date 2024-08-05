@@ -9,9 +9,11 @@
 #include "6502_types.h"
 
 U8 fileGetLine(FILE * file, char * dstString);
-U8 rowExploder(char * pRow, char ** pDstElements);
+U8 rowExploder(char * pRow, char *** pDstElements);
 char * skipWhitespace(char * pStr);
-char * getElement(char * pStr, char ** pDstList);
+char * skipElement(char * pStr);
+void handleElements(char ** ppElementList, U8 elementCount);
+U8 checkLabel(char * pElement);
 
 extern opCode_st * mos6502_opCodes;
 
@@ -23,16 +25,31 @@ void mos6502_assemble(char * asmFilePath, U8 * memory) {
 	FILE * asmFile = fopen(asmFilePath, "r");
 	char * nextLine = calloc(257, sizeof(U8));
 	U8 errCode;
+	U8 skip = 0;
 
 	while (errCode = fileGetLine(asmFile, nextLine)) {
-		char ** rowContents = NULL;
+		char *** pppRowContents = (char ***)calloc(sizeof(char **), 1);
 		U8 elementCount;
 		
-		elementCount = rowExploder(nextLine, rowContents);
+		elementCount = rowExploder(nextLine, pppRowContents);
 
-		for (elementCount; elementCount > 0; elementCount--) {
-			free(rowContents[elementCount]);
+		if (*pppRowContents != NULL) {
+
+			if (strcmp((*pppRowContents)[0], "COMMENT") == 0) {
+				skip = 1;
+			} else if (skip == 1 && strcmp((*pppRowContents)[0], "END_COMMENT") == 0) {
+				skip = 2;
+			}
+
+			if (skip == 0) {
+				handleElements(*pppRowContents, elementCount);
+			} else if (skip == 2) {
+				skip = 0;
+			}
+				
 		}
+
+		free(pppRowContents);
 	}
 
 	fclose(asmFile);
@@ -81,7 +98,7 @@ U8 fileGetLine(FILE * file, char * dstString) {
 /*******************************************************************************
 * Turn row of a file to list of whitespace separated elements.
 *******************************************************************************/
-U8 rowExploder(char * pRow, char ** pDstElements) {
+U8 rowExploder(char * pRow, char *** pDstElements) {
 
 	U8 notFinished = 1;
 	U8 elementCount = 0;
@@ -92,13 +109,13 @@ U8 rowExploder(char * pRow, char ** pDstElements) {
 
 		if (*pRow != '\0') {
 
-			char * tempElement = NULL;
 
 			elementCount++;
-			*pDstElements = (char *)realloc(*pDstElements, sizeof(char *) * elementCount);
+			*pDstElements = (char **)realloc(*pDstElements, sizeof(char *) * elementCount);
 
-			pRow = getElement(pRow, &tempElement);
-			pDstElements[elementCount - 1] = tempElement;
+			(*pDstElements)[elementCount - 1] = pRow;
+
+			pRow = skipElement(pRow);
 
 		} else {
 			notFinished = 0;
@@ -108,12 +125,12 @@ U8 rowExploder(char * pRow, char ** pDstElements) {
 }
 
 /*******************************************************************************
-* Move string pointer past whitespace.
+* Convert whitespaces to null and move string pointer to next element.
 *******************************************************************************/
 char * skipWhitespace(char * pStr) {
 
 	while ((*pStr == ' ' || *pStr == '\t') && *pStr != '\0') {
-		pStr++;
+		*pStr++ = '\0';
 	}
 
 	return pStr;
@@ -122,19 +139,35 @@ char * skipWhitespace(char * pStr) {
 /*******************************************************************************
 * Reads next element from the string.
 *******************************************************************************/
-char * getElement(char * pStr, char ** pDstList) {
+char * skipElement(char * pStr) {
 	U8 buffIndex = 0;
 	char * dstStr = calloc(256, sizeof(char));
 
-	while (*pStr != ' ' && *pStr != '\n' && *pStr != '\0') {
-		dstStr[buffIndex++] = *pStr++;
+	while (*pStr != ' ' && *pStr != '\t' && *pStr != '\0') {
+		pStr++;
 	}
 
-	dstStr[buffIndex] = '\0';
-
-	dstStr = (char *)realloc(dstStr, sizeof(char) * (buffIndex + 1));
-
-	*pDstList = dstStr;
-
 	return pStr;
+}
+
+void handleElements(char ** ppElementList, U8 elementCount) {
+
+	if (checkLabel(*ppElementList)) {
+
+	}
+
+	for (int elementIndex = 0; elementIndex < elementCount; elementIndex++) {
+
+		printf("%s\t\t", ppElementList[elementIndex]);
+
+	}
+
+	printf("\n");
+}
+
+U8 checkLabel(char * pElement) {
+
+	while(*pElement++ != '\0');
+
+	return *(pElement - 1) == ':' ? 1 : 0;
 }

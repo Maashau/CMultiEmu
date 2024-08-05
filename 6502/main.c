@@ -3,11 +3,15 @@
 #include <time.h>
 #include "6502.h"
 
-#define PRG_STORE_TO_MEM	0
-#define PRG_CLEAR_MEM		1
-#define PRG_WEEKDAY			2
+#define PRG_AS_ARGUMENT		0
+#define PRG_STORE_TO_MEM	1
+#define PRG_CLEAR_MEM		2
+#define PRG_WEEKDAY		3
+#define PRG_count_impl_opc	4
+#define PRG_count_impl_leg_opc	5
+#define PRG_ASSEMBLE		6
 
-#define program PRG_WEEKDAY
+#define program PRG_AS_ARGUMENT
 
 typedef enum {
 	mos6502_BIN,
@@ -20,36 +24,82 @@ U16 memRead16(U16 address);
 void memWrite8(U16 address, U8 value);
 void memWrite16(U16 address, U16 value);
 
+void memDummyWrite8(mos6502_addr address, U8 value) { return; }
+void memDummyWrite16(mos6502_addr address, U16 value) { return; }
+
 void loadFile(U8 * memory, const char * path, mos6502_fileType fileType);
 
 U8 * ram;
+
+const U8 legalOpcodes[] = {
+	0x00, 0x01, 0x05, 0x06, 0x08, 0x09, 0x0A, 0x0D, 0x0E, 0x10, 0x11, 0x15,
+	0x16, 0x18, 0x19, 0x1D, 0x1E, 0x20, 0x21, 0x24, 0x25, 0x26, 0x28, 0x29,
+	0x2A, 0x2C, 0x2D, 0x2E, 0x30, 0x31, 0x35, 0x36, 0x38, 0x39, 0x3D, 0x3E,
+	0x40, 0x41, 0x45, 0x46, 0x48, 0x49, 0x4A, 0x4C, 0x4D, 0x4E, 0x50, 0x51,
+	0x55, 0x56, 0x58, 0x59, 0x5D, 0x5E, 0x60, 0x61, 0x65, 0x66, 0x68, 0x69,
+	0x6A, 0x6C, 0x6D, 0x6E, 0x70, 0x71, 0x75, 0x76, 0x78, 0x79, 0x7D, 0x7E,
+	0x81, 0x84, 0x85, 0x86, 0x88, 0x8A, 0x8C, 0x8D, 0x8E, 0x90, 0x91, 0x94,
+	0x95, 0x96, 0x98, 0x99, 0x9A, 0x9D, 0xA0, 0xA1, 0xA2, 0xA4, 0xA5, 0xA6,
+	0xA8, 0xA9, 0xAA, 0xAC, 0xAD, 0xAE, 0xB0, 0xB1, 0xB4, 0xB5, 0xB6, 0xB8,
+	0xB9, 0xBA, 0xBC, 0xBD, 0xBE, 0xC0, 0xC1, 0xC4, 0xC5, 0xC6, 0xC8, 0xC9,
+	0xCA, 0xCC, 0xCD, 0xCE, 0xD0, 0xD1, 0xD5, 0xD6, 0xD8, 0xD9, 0xDD, 0xDE,
+	0xE0, 0xE1, 0xE4, 0xE5, 0xE6, 0xE8, 0xE9, 0xEA, 0xEC, 0xED, 0xEE, 0xF0,
+	0xF1, 0xF5, 0xF6, 0xF8, 0xF9, 0xFD, 0xFE
+};
 
 /*******************************************************************************
 * Handles loading and running the program.
 *
 * Returns: -
 *******************************************************************************/
-int main(void) {
+int main(int argc, char * argv[]) {
 
+	int selected_program;
+	U16 opCount = 0;
 	U8 memory[MOS6502_MEMSIZE];
 
-	//mos6502_assemble("./prg/asm/32bitdiv.6502asm", ram);
-
-#if program == PRG_STORE_TO_MEM // write values to memory.
-
-	loadFile(memory, "./prg/bin/memWrite.6502", mos6502_BIN);
-
-#elif program == PRG_CLEAR_MEM // Clears X amount of memory from memory address (100), Y
-
-	loadFile(memory, "./prg/bin/memClear.6502", mos6502_BIN);
-
-#elif program == PRG_WEEKDAY // Day of the week. Y = year, X = month, AC = day
-
-	loadFile(memory, "./prg/bin/weekday.6502", mos6502_BIN);
-
-	printf("Calculating weekday (from 1 to 7) for %d.%d.%d\n\n", memory[5], memory[3], memory[1] + 1900);
-
+#if program == PRG_AS_ARGUMENT
+	if (argc == 2 && *argv[1] >= '0' && *argv[1] <= '9') {
+		selected_program = *argv[1] - '0';
+	} else {
+		printf("Invalid program index given as parameter\n\n");
+		printf("Valid program indexes:\n");
+		printf("\t1 - Store to memory\n");
+		printf("\t2 - Clear memory region\n");
+		printf("\t3 - Calculate weekday (1-7) from date\n");
+		printf("\t4 - Count implemented op codes (all)\n");
+		printf("\t5 - Count implemented legal op codes\n");
+		printf("\t6 - Run the assembler\n");
+		printf("\n");
+		exit(1);
+	}
+#else
+	selected_program = program;
 #endif
+
+
+
+	if (selected_program == PRG_ASSEMBLE) {
+		mos6502_assemble("./prg/asm/32bitdiv.6502asm", ram);
+		return 0;
+	} else if (selected_program == PRG_STORE_TO_MEM) { // write values to memory.
+		loadFile(memory, "./prg/bin/memWrite.6502", mos6502_BIN);
+	} else if (selected_program == PRG_CLEAR_MEM) { // Clears X amount of memory from memory address (100), Y
+		loadFile(memory, "./prg/bin/memClear.6502", mos6502_BIN);
+	} else if (selected_program == PRG_WEEKDAY) { // Day of the week. Y = year, X = month, AC = day
+		loadFile(memory, "./prg/bin/weekday.6502", mos6502_BIN);
+		printf("Calculating weekday (from 1 to 7) for %d.%d.%d\n\n", memory[5], memory[3], memory[1] + 1900);
+	} else if (selected_program == PRG_count_impl_opc) {
+		opCount	= 256;
+		for (int ii = 0; ii < opCount; ii++) {
+			memory[ii] = ii;
+		}
+	} else if (selected_program == PRG_count_impl_leg_opc) {
+		opCount = sizeof(legalOpcodes);
+		for (int ii = 0; ii < opCount; ii++) {
+			memory[ii] = legalOpcodes[ii];
+		}
+	}
 
 	ram = memory;
 
@@ -69,24 +119,44 @@ int main(void) {
 
 	clock_gettime(CLOCK_REALTIME, &sT);
 
-	while (retVal != 0xFF) {
-		retVal = mos6502_handleOp(&processor);
+	if (selected_program == PRG_count_impl_opc || selected_program == PRG_count_impl_leg_opc) {
+		U8 count = 0;
 
-		if (retVal == 0xFF) {
-			break;
+		processor.memIf.write8 = memDummyWrite8;
+		processor.memIf.write16 = memDummyWrite16;
+
+		for (int ii = 0; ii < opCount; ii++) {
+			processor.reg.PC = ii;
+			retVal = mos6502_handleOp(&processor);
+
+			if (retVal != 0xFF) {
+				count++;
+			}
 		}
 
-		totalOperations++;
+		printf("\nCount of implemented ops: %d/%d (%d\%)\n\n", count, opCount, (count * 100) / opCount);
 
-		//getc(stdin);
+	} else {
+
+		while (retVal != 0xFF) {
+			retVal = mos6502_handleOp(&processor);
+
+			if (retVal == 0xFF) {
+				break;
+			}
+
+			totalOperations++;
+
+			//getc(stdin);
+		}
+		clock_gettime(CLOCK_REALTIME, &eT);
 	}
-	clock_gettime(CLOCK_REALTIME, &eT);
 
-#if program == PRG_WEEKDAY
 
-	printf("Answer: %d\n\n", processor.reg.AC);
+	if (selected_program == PRG_WEEKDAY) {
+		printf("Answer: %d\n\n", processor.reg.AC);
+	}
 
-#endif
 
 	time_t secsPassed, nsecsPassed = 0;
 
@@ -124,7 +194,7 @@ int main(void) {
 * Arguments:
 *	pMemory - Pointer to a memory allocation.
 *	pPath	- Pointer to a file path.
-*	
+*
 *
 * Returns: Nothing.
 *******************************************************************************/

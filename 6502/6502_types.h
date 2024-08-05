@@ -1,4 +1,6 @@
-
+/*******************************************************************************
+* MOS 6502 emulator type definitions.
+*******************************************************************************/
 #ifndef FILE_6502_TYPES_H
 #define FILE_6502_TYPES_H
 typedef unsigned char U8;
@@ -36,14 +38,14 @@ typedef struct {
 } mos6502_processor_st;
 
 enum {
-	SR_FLAG_CARRY		= (1 << 0),
-	SR_FLAG_ZERO		= (1 << 1),
-	SR_FLAG_IRQ			= (1 << 2),
-	SR_FLAG_DECIMAL		= (1 << 3),
-	SR_FLAG_BREAK		= (1 << 4),
-	SR_FLAG_UNUSED		= (1 << 5),
-	SR_FLAG_OVERFLOW	= (1 << 6),
-	SR_FLAG_NEGATIVE	= (1 << 7),
+	SR_FLAG_C		= (1 << 0),
+	SR_FLAG_Z		= (1 << 1),
+	SR_FLAG_I		= (1 << 2),
+	SR_FLAG_D		= (1 << 3),
+	SR_FLAG_B		= (1 << 4),
+	SR_FLAG_UNUSED	= (1 << 5),
+	SR_FLAG_V		= (1 << 6),
+	SR_FLAG_N		= (1 << 7),
 };
 
 typedef enum {
