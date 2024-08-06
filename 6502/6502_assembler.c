@@ -152,8 +152,8 @@ char * skipElement(char * pStr) {
 
 void handleElements(char ** ppElementList, U8 elementCount) {
 
-	if (checkLabel(*ppElementList)) {
-
+	if (!checkLabel(*ppElementList)) {
+		printf("\t\t");
 	}
 
 	for (int elementIndex = 0; elementIndex < elementCount; elementIndex++) {
@@ -167,7 +167,7 @@ void handleElements(char ** ppElementList, U8 elementCount) {
 
 U8 checkLabel(char * pElement) {
 
-	while(*pElement++ != '\0');
+	while(*(++pElement) != '\0');
 
 	return *(pElement - 1) == ':' ? 1 : 0;
 }

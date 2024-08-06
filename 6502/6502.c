@@ -305,7 +305,7 @@ void mos6502_init(mos6502_processor_st * pProcessor) {
 * Returns: Cycles elapsed
 *******************************************************************************/
 U8 mos6502_handleOp(mos6502_processor_st * pProcessor) {
-	
+
 	mos6502_addr oldPC = pProcessor->reg.PC;
 	U8 operands[2];
 
@@ -319,7 +319,7 @@ U8 mos6502_handleOp(mos6502_processor_st * pProcessor) {
 	pProcessor->cycleCount += retCode;
 
 	DBG_PRINT(printCurrOp(pProcessor, oldPC, opCode, operands, retCode));
-	
+
 	if (retCode == 0xFF) {
 		printf("\n\nNon-implemented op-code %s (0x%02X)\n\n", mos6502__opCodes[opCode].mnemonic, opCode);
 	} else if (retCode == 0xFE) {
@@ -413,28 +413,26 @@ void printCurrOp(
 			break;
 	}
 
-	DBG_PRINT(
-		printf("| %04X | %02X %c%c %c%c | %-4s %s | %02X %02X %02X %02X | %d%d%d%d%d%d | %3d (%llu)\n",
-			PC,
-			opCode,
-			mos6502__opCodes[opCode].bytes > 1 ? operands[0] : ' ',
-			mos6502__opCodes[opCode].bytes > 1 ? operands[1] : ' ',
-			mos6502__opCodes[opCode].bytes > 2 ? operands[2] : ' ',
-			mos6502__opCodes[opCode].bytes > 2 ? operands[3] : ' ',
-			mos6502__opCodes[opCode].mnemonic,
-			asmOperand,
-			pProcessor->reg.AC,
-			pProcessor->reg.X,
-			pProcessor->reg.Y,
-			pProcessor->reg.SP,
-			pProcessor->reg.SR & SR_FLAG_N ? 1 : 0,
-			pProcessor->reg.SR & SR_FLAG_V ? 1 : 0,
-			pProcessor->reg.SR & SR_FLAG_D ? 1 : 0,
-			pProcessor->reg.SR & SR_FLAG_I ? 1 : 0,
-			pProcessor->reg.SR & SR_FLAG_Z ? 1 : 0,
-			pProcessor->reg.SR & SR_FLAG_C ? 1 : 0,
-			cycles,
-			pProcessor->cycleCount
-		)
+	printf("| %04X | %02X %c%c %c%c | %-4s %s | %02X %02X %02X %02X | %d%d%d%d%d%d | %3d (%llu)\n",
+		PC,
+		opCode,
+		mos6502__opCodes[opCode].bytes > 1 ? operands[0] : ' ',
+		mos6502__opCodes[opCode].bytes > 1 ? operands[1] : ' ',
+		mos6502__opCodes[opCode].bytes > 2 ? operands[2] : ' ',
+		mos6502__opCodes[opCode].bytes > 2 ? operands[3] : ' ',
+		mos6502__opCodes[opCode].mnemonic,
+		asmOperand,
+		pProcessor->reg.AC,
+		pProcessor->reg.X,
+		pProcessor->reg.Y,
+		pProcessor->reg.SP,
+		pProcessor->reg.SR & SR_FLAG_N ? 1 : 0,
+		pProcessor->reg.SR & SR_FLAG_V ? 1 : 0,
+		pProcessor->reg.SR & SR_FLAG_D ? 1 : 0,
+		pProcessor->reg.SR & SR_FLAG_I ? 1 : 0,
+		pProcessor->reg.SR & SR_FLAG_Z ? 1 : 0,
+		pProcessor->reg.SR & SR_FLAG_C ? 1 : 0,
+		cycles,
+		pProcessor->cycleCount
 	);
 }

@@ -10,6 +10,9 @@
 //#include "6502_opc.h"
 #include "6502_addrm.h"
 
+/*******************************************************************************
+* Macros and definitions.
+*******************************************************************************/
 #define SR_GET_N() (pProcessor->reg.SR & SR_FLAG_N) ? 1 : 0
 #define SR_GET_Z() (pProcessor->reg.SR & SR_FLAG_Z) ? 1 : 0
 #define SR_GET_C() (pProcessor->reg.SR & SR_FLAG_C) ? 1 : 0
@@ -60,37 +63,37 @@ U8 mos6502_ADC(mos6502_processor_st * pProcessor, U8 opCode) {
 	// TODO implement decimal mode (BCD)
 
 	switch (opCode) {
-		case 0x61: // (indirect,X)
-			address = addrm_xInd(pProcessor);
-			cyclesPassed = 6;
+		case 0x69: // immediate
+			address = addrm_imm(pProcessor);
+			cyclesPassed = 2;
 			break;
 		case 0x65: // zeropage
 			address = addrm_zpg(pProcessor);
 			cyclesPassed = 3;
 			break;
-		case 0x69: // immediate
-			address = addrm_imm(pProcessor);
-			cyclesPassed = 2;
+		case 0x75: // zeropage,X
+			address = addrm_zpgX(pProcessor);
+			cyclesPassed = 4;
 			break;
 		case 0x6D: // absolute
 			address = addrm_abs(pProcessor);
 			cyclesPassed = 4;
 			break;
-		case 0x71: // (indirect),Y
-			address = addrm_indY(pProcessor);
-			cyclesPassed = 5;
-			break;
-		case 0x75: // zeropage,X
-			address = addrm_zpgX(pProcessor);
+		case 0x7D: // absolute,X
+			address = addrm_absX(pProcessor);
 			cyclesPassed = 4;
 			break;
 		case 0x79: // absolute,Y
 			address = addrm_absY(pProcessor);
 			cyclesPassed = 4;
 			break;
-		case 0x7D: // absolute,X
-			address = addrm_absX(pProcessor);
-			cyclesPassed = 4;
+		case 0x61: // (indirect,X)
+			address = addrm_xInd(pProcessor);
+			cyclesPassed = 6;
+			break;
+		case 0x71: // (indirect),Y
+			address = addrm_indY(pProcessor);
+			cyclesPassed = 5;
 			break;
 		default:
 			return 0xFF;
@@ -101,9 +104,9 @@ U8 mos6502_ADC(mos6502_processor_st * pProcessor, U8 opCode) {
 	pProcessor->reg.AC += SR_GET_C();
 	
 	switch (opCode)	{
-		case 0x71:
-		case 0x79:
 		case 0x7D:
+		case 0x79:
+		case 0x71:
 			cyclesPassed += MOS6502_OUTOFPAGE(oldPC, address);
 			break;
 		default:
@@ -637,28 +640,20 @@ U8 mos6502_CMP(mos6502_processor_st * pProcessor, U8 opCode) {
 	U8 memValue = 0;
 
 	switch (opCode) {
-		case 0xC1: // (indirect,X)
-			address = addrm_xInd(pProcessor);
-			cyclesPassed = 6;
+		case 0xC9: // immediate
+			address = addrm_imm(pProcessor);
+			cyclesPassed = 2;
 			break;
 		case 0xC5: // zeropage
 			address = addrm_zpg(pProcessor);
 			cyclesPassed = 3;
 			break;
-		case 0xC9: // immediate
-			address = addrm_imm(pProcessor);
-			cyclesPassed = 2;
+		case 0xD5: // zeropage,X
+			address = addrm_zpgX(pProcessor);
+			cyclesPassed = 4;
 			break;
 		case 0xCD: // absolute
 			address = addrm_abs(pProcessor);
-			cyclesPassed = 4;
-			break;
-		case 0xD1: // (indirect),Y
-			address = addrm_indY(pProcessor);
-			cyclesPassed = 5;
-			break;
-		case 0xD5: // zeropage,X
-			address = addrm_zpgX(pProcessor);
 			cyclesPassed = 4;
 			break;
 		case 0xDD: // absolute,X
@@ -669,6 +664,14 @@ U8 mos6502_CMP(mos6502_processor_st * pProcessor, U8 opCode) {
 			address = addrm_absY(pProcessor);
 			cyclesPassed = 4;
 			break;
+		case 0xC1: // (indirect,X)
+			address = addrm_xInd(pProcessor);
+			cyclesPassed = 6;
+			break;
+		case 0xD1: // (indirect),Y
+			address = addrm_indY(pProcessor);
+			cyclesPassed = 5;
+			break;
 		default:
 			return 0xFF;
 	}
@@ -677,9 +680,9 @@ U8 mos6502_CMP(mos6502_processor_st * pProcessor, U8 opCode) {
 
 	switch (opCode)
 	{
-		case 0xD1:
-		case 0xD9:
 		case 0xDD:
+		case 0xD9:
+		case 0xD1:
 			cyclesPassed += MOS6502_OUTOFPAGE(oldPC, address);
 			break;
 		default:
@@ -876,37 +879,37 @@ U8 mos6502_EOR(mos6502_processor_st * pProcessor, U8 opCode) {
 	U8 tempAc = pProcessor->reg.AC;
 
 	switch (opCode) {
-		case 0x41: // (indirect, X)
-			address = addrm_xInd(pProcessor);
-			cyclesPassed = 6;
+		case 0x49: // immediate
+			address = addrm_imm(pProcessor);
+			cyclesPassed = 2;
 			break;
 		case 0x45: // zeropage
 			address = addrm_zpg(pProcessor);
 			cyclesPassed = 3;
 			break;
-		case 0x49: // immediate
-			address = addrm_imm(pProcessor);
-			cyclesPassed = 2;
+		case 0x55: // zeropage, X
+			address = addrm_zpgX(pProcessor);
+			cyclesPassed = 4;
 			break;
 		case 0x4D: // absolute
 			address = addrm_abs(pProcessor);
 			cyclesPassed = 4;
 			break;
-		case 0x51: // (indirect), Y
-			address = addrm_indY(pProcessor);
-			cyclesPassed = 6;
-			break;
-		case 0x55: // zeropage, X
-			address = addrm_zpgX(pProcessor);
+		case 0x5D: // absolute, X
+			address = addrm_absX(pProcessor);
 			cyclesPassed = 4;
 			break;
 		case 0x59: // absolute, Y
 			address = addrm_absY(pProcessor);
 			cyclesPassed = 4;
 			break;
-		case 0x5D: // absolute, X
-			address = addrm_absX(pProcessor);
-			cyclesPassed = 4;
+		case 0x41: // (indirect, X)
+			address = addrm_xInd(pProcessor);
+			cyclesPassed = 6;
+			break;
+		case 0x51: // (indirect), Y
+			address = addrm_indY(pProcessor);
+			cyclesPassed = 5;
 			break;
 		default:
 			return 0xFF;
@@ -915,9 +918,9 @@ U8 mos6502_EOR(mos6502_processor_st * pProcessor, U8 opCode) {
 	pProcessor->reg.AC ^= pProcessor->memIf.read8(address);
 	
 	switch (opCode) {
-		case 0x51:
-		case 0x59:
 		case 0x5D:
+		case 0x59:
+		case 0x51:
 			cyclesPassed += MOS6502_OUTOFPAGE(oldPC, address);
 			break;
 		default:
@@ -1113,37 +1116,37 @@ U8 mos6502_LDA(mos6502_processor_st * pProcessor, U8 opCode) {
 	U16 address = 0;
 
 	switch (opCode) {
-		case 0xA1: // (indirect, X)
-			address = addrm_xInd(pProcessor);
-			cyclesPassed = 6;
+		case 0xA9:	// Immediate
+			address = addrm_imm(pProcessor);
+			cyclesPassed = 2;
 			break;
 		case 0xA5: // zeropage
 			address = addrm_zpg(pProcessor);
 			cyclesPassed = 3;
 			break;
-		case 0xA9:	// Immediate
-			address = addrm_imm(pProcessor);
-			cyclesPassed = 2;
+		case 0xB5: // zeropage, X
+			address = addrm_zpgX(pProcessor);
+			cyclesPassed = 4;
 			break;
 		case 0xAD: // absolute
 			address = addrm_abs(pProcessor);
 			cyclesPassed = 4;
 			break;
-		case 0xB1: // (indirect), Y
-			address = addrm_indY(pProcessor);
-			cyclesPassed = 5;
-			break;
-		case 0xB5: // zeropage, X
-			address = addrm_zpgX(pProcessor);
+		case 0xBD: // absolute, X
+			address = addrm_absX(pProcessor);
 			cyclesPassed = 4;
 			break;
 		case 0xB9: // absolute, Y
 			address = addrm_absY(pProcessor);
-			cyclesPassed = 5;
+			cyclesPassed = 4;
 			break;
-		case 0xBD: // absolute, X
-			address = addrm_absX(pProcessor);
+		case 0xA1: // (indirect, X)
+			address = addrm_xInd(pProcessor);
 			cyclesPassed = 6;
+			break;
+		case 0xB1: // (indirect), Y
+			address = addrm_indY(pProcessor);
+			cyclesPassed = 5;
 			break;
 		default:
 			return 0xFF;
@@ -1152,9 +1155,9 @@ U8 mos6502_LDA(mos6502_processor_st * pProcessor, U8 opCode) {
 	pProcessor->reg.AC = pProcessor->memIf.read8(address);
 
 	switch (opCode) {
-		case 0xB1:
-		case 0xB9:
 		case 0xBD:
+		case 0xB9:
+		case 0xB1:
 			cyclesPassed += MOS6502_OUTOFPAGE(oldPC, address);
 			break;
 		default:
@@ -1426,37 +1429,37 @@ U8 mos6502_ORA(mos6502_processor_st * pProcessor, U8 opCode) {
 	U8 memValue;
 
 	switch (opCode) {
-		case 0x01:	// (indirect,X)
-			address = addrm_xInd(pProcessor);
-			cyclesPassed = 6;
+		case 0x09:	// immediate
+			address = addrm_imm(pProcessor);
+			cyclesPassed = 2;
 			break;
 		case 0x05:	// zeropage
 			address = addrm_zpg(pProcessor);
 			cyclesPassed = 3;
 			break;
-		case 0x09:	// immediate
-			address = addrm_imm(pProcessor);
-			cyclesPassed = 2;
+		case 0x15:	// zeropage,X
+			address = addrm_zpgX(pProcessor);
+			cyclesPassed = 4;
 			break;
 		case 0x0D:	// absolute
 			address = addrm_abs(pProcessor);
 			cyclesPassed = 4;
 			break;
-		case 0x11:	// (indirect),Y
-			address = addrm_indY(pProcessor);
-			cyclesPassed = 5;
-			break;
-		case 0x15:	// zeropage,X
-			address = addrm_zpgX(pProcessor);
+		case 0x1D:	// absolute,X
+			address = addrm_absX(pProcessor);
 			cyclesPassed = 4;
 			break;
 		case 0x19:	// absolute,Y
 			address = addrm_absY(pProcessor);
 			cyclesPassed = 4;
 			break;
-		case 0x1D:	// absolute,X
-			address = addrm_absX(pProcessor);
-			cyclesPassed = 4;
+		case 0x01:	// (indirect,X)
+			address = addrm_xInd(pProcessor);
+			cyclesPassed = 6;
+			break;
+		case 0x11:	// (indirect),Y
+			address = addrm_indY(pProcessor);
+			cyclesPassed = 5;
 			break;
 		default:
 			return 0xFF;
@@ -1467,9 +1470,9 @@ U8 mos6502_ORA(mos6502_processor_st * pProcessor, U8 opCode) {
 	pProcessor->reg.AC |= memValue;
 
 	switch (opCode) {
-		case 0x11:
-		case 0x19:
 		case 0x1D:
+		case 0x19:
+		case 0x11:
 			cyclesPassed += MOS6502_OUTOFPAGE(oldPC, address);
 			break;
 		default:
@@ -1766,20 +1769,20 @@ U8 mos6502_SBC(mos6502_processor_st * pProcessor, U8 opCode) {
 
 	// TODO implement decimal mode (BCD)
 	switch (opCode) {
+		case 0xE9: // immediate
+			address = addrm_imm(pProcessor);
+			cyclesPassed = 2;
+			break;
 		case 0xE5: // zeropage
 			address = addrm_zpg(pProcessor);
 			cyclesPassed = 3;
 			break;
-		case 0xED: // absolute
-			address = addrm_abs(pProcessor);
-			cyclesPassed = 4;
-			break;
-		case 0xE9: // immediate
-			address = addrm_imm(pProcessor);
-			cyclesPassed = 4;
-			break;
 		case 0xF5: // zeropage,X
 			address = addrm_zpgX(pProcessor);
+			cyclesPassed = 4;
+			break;
+		case 0xED: // absolute
+			address = addrm_abs(pProcessor);
 			cyclesPassed = 4;
 			break;
 		case 0xFD: // absolute,X
@@ -1963,29 +1966,29 @@ U8 mos6502_STA(mos6502_processor_st * pProcessor, U8 opCode) {
 			address = addrm_zpg(pProcessor);
 			cyclesPassed = 3;
 			break;
+		case 0x95: // zeropage,X
+			address = addrm_zpgX(pProcessor);
+			cyclesPassed = 4;
+			break;
 		case 0x8D: // absolute
 			address = addrm_abs(pProcessor);
 			cyclesPassed = 4;
 			break;
-		case 0x91: // (indirect),Y
-			address = addrm_indY(pProcessor);
-			cyclesPassed = 6;
-			break;
-		case 0x81: // (indirect,X)
-			address = addrm_xInd(pProcessor);
-			cyclesPassed = 6;
-			break;
-		case 0x95: // zeropage,X
-			address = addrm_zpgX(pProcessor);
-			cyclesPassed = 4;
+		case 0x9D: // absolute,X
+			address = addrm_absX(pProcessor);
+			cyclesPassed = 5;
 			break;
 		case 0x99: // absolute,Y
 			address = addrm_absY(pProcessor);
 			cyclesPassed = 5;
 			break;
-		case 0x9D: // absolute,X
-			address = addrm_absX(pProcessor);
-			cyclesPassed = 5;
+		case 0x81: // (indirect,X)
+			address = addrm_xInd(pProcessor);
+			cyclesPassed = 6;
+			break;
+		case 0x91: // (indirect),Y
+			address = addrm_indY(pProcessor);
+			cyclesPassed = 6;
 			break;
 		default:
 			return 0xFF;

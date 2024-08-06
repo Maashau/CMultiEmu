@@ -2,14 +2,17 @@
 #include <stdlib.h>
 #include <time.h>
 #include "6502.h"
+// Non-blocking fgetc()
+#include <fcntl.h>
 
-#define PRG_AS_ARGUMENT		0
-#define PRG_STORE_TO_MEM	1
-#define PRG_CLEAR_MEM		2
-#define PRG_WEEKDAY		3
-#define PRG_count_impl_opc	4
+#define PRG_AS_ARGUMENT			0
+#define PRG_STORE_TO_MEM		1
+#define PRG_CLEAR_MEM			2
+#define PRG_WEEKDAY				3
+#define PRG_count_impl_opc		4
 #define PRG_count_impl_leg_opc	5
-#define PRG_ASSEMBLE		6
+#define PRG_ASSEMBLE			6
+#define PRG_KEYBOARD			7
 
 #define program PRG_AS_ARGUMENT
 
@@ -19,10 +22,14 @@ typedef enum {
 	mos6502_ASM
 } mos6502_fileType;
 
+mos6502_addr keyboardAddr = 0xFFF0;
+
 U8 memRead8(U16 address);
 U16 memRead16(U16 address);
 void memWrite8(U16 address, U8 value);
 void memWrite16(U16 address, U16 value);
+
+U8 readKeyboard();
 
 void memDummyWrite8(mos6502_addr address, U8 value) { return; }
 void memDummyWrite16(mos6502_addr address, U16 value) { return; }
@@ -70,6 +77,7 @@ int main(int argc, char * argv[]) {
 		printf("\t4 - Count implemented op codes (all)\n");
 		printf("\t5 - Count implemented legal op codes\n");
 		printf("\t6 - Run the assembler\n");
+		printf("\t7 - Keyboard test, prints out 5 characters entered\n");
 		printf("\n");
 		exit(1);
 	}
@@ -99,6 +107,8 @@ int main(int argc, char * argv[]) {
 		for (int ii = 0; ii < opCount; ii++) {
 			memory[ii] = legalOpcodes[ii];
 		}
+	} else if (selected_program == PRG_KEYBOARD) {
+		loadFile(memory, "./prg/bin/kbTest.6502", mos6502_BIN);		
 	}
 
 	ram = memory;
@@ -155,6 +165,8 @@ int main(int argc, char * argv[]) {
 
 	if (selected_program == PRG_WEEKDAY) {
 		printf("Answer: %d\n\n", processor.reg.AC);
+	} else if (selected_program == PRG_KEYBOARD) {
+		printf("String entered: %s\n\n", &memory[0x50]);
 	}
 
 
@@ -235,7 +247,11 @@ void loadFile(U8 * pMemory, const char * pPath, mos6502_fileType fileType) {
 * Returns: Byte read from the memory.
 *******************************************************************************/
 U8 memRead8(mos6502_addr address) {
-	return ram[address];
+	if (address == keyboardAddr) {
+		return readKeyboard();
+	} else {
+		return ram[address];
+	}
 }
 
 /*******************************************************************************
@@ -247,7 +263,13 @@ U8 memRead8(mos6502_addr address) {
 * Returns: Address read from the memory.
 *******************************************************************************/
 mos6502_addr memRead16(mos6502_addr address) {
-	return ram[address] | (ram[address + 1] << 8);
+	if (address == keyboardAddr) {
+		return (memRead8(address + 1) << 8) | readKeyboard();
+	} else if (address == keyboardAddr - 1) {
+		return (readKeyboard() << 8) | memRead8(address + 1);
+	} else {
+		return memRead8(address) | (memRead8(address + 1) << 8);
+	}
 }
 
 /*******************************************************************************
@@ -260,7 +282,9 @@ mos6502_addr memRead16(mos6502_addr address) {
 * Returns: Nothing.
 *******************************************************************************/
 void memWrite8(mos6502_addr address, U8 value) {
-	ram[address] = value;
+	if (address != keyboardAddr) {
+		ram[address] = value;
+	}
 }
 
 /*******************************************************************************
@@ -273,6 +297,29 @@ void memWrite8(mos6502_addr address, U8 value) {
 * Returns: Nothing.
 *******************************************************************************/
 void memWrite16(mos6502_addr address, U16 value) {
-	ram[address] = (U8)value;
-	ram[address + 1] = (U8)(value >> 8);
+	if (address == keyboardAddr) {
+		memWrite8(address + 1, (U8)(value >> 8));
+	} else if (address == keyboardAddr - 1) {
+		memWrite8(address, (U8)value);
+	} else {
+		memWrite8(address, (U8)value);
+		memWrite8(address + 1, (U8)(value >> 8));
+	}
+}
+
+U8 readKeyboard() {
+	U8 key;
+	system("/bin/stty raw");
+	fcntl(0, F_SETFL, O_NONBLOCK);
+	key = fgetc(stdin);
+
+	while(1) {
+
+		U8 tempKey = fgetc(stdin);
+		if (tempKey != key || tempKey == 0xFF) {
+			break;
+		}
+	}
+	system("/bin/stty cooked");
+	return key;
 }
