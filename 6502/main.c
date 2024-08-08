@@ -36,6 +36,8 @@ void memDummyWrite16(mos6502_addr address, U16 value) { return; }
 
 void loadFile(U8 * memory, const char * path, mos6502_fileType fileType);
 
+void clearScreen();
+
 U8 * ram;
 
 const U8 legalOpcodes[] = {
@@ -96,7 +98,59 @@ int main(int argc, char * argv[]) {
 		loadFile(memory, "./prg/bin/memClear.6502", mos6502_BIN);
 	} else if (selected_program == PRG_WEEKDAY) { // Day of the week. Y = year, X = month, AC = day
 		loadFile(memory, "./prg/bin/weekday.6502", mos6502_BIN);
-		printf("Calculating weekday (from 1 to 7) for %d.%d.%d\n\n", memory[5], memory[3], memory[1] + 1900);
+		while (1) {
+			char entry[2] = {0};
+			fputs("Enter day (01 - 31): ", stdout);
+			entry[0] = fgetc(stdin);
+			entry[1] = fgetc(stdin);
+			if (
+				entry[0] <= '9' && entry[0] >= '0'
+			&&	entry[1] <= '9' && entry[1] >= '0'
+			) {
+				memory[5] = (entry[0] - '0') * 10 + (entry[1] - '0');
+				if (memory[5] <= 31 && memory[5] >= 1) {
+					break;
+				}
+			}
+		}
+		fgetc(stdin);
+		while (1) {
+			char entry[2] = {0};
+			fputs("Enter month (01 - 12): ", stdout);
+			entry[0] = fgetc(stdin);
+			entry[1] = fgetc(stdin);
+			if (
+				entry[0] <= '9' && entry[0] >= '0'
+			&&	entry[1] <= '9' && entry[1] >= '0'
+			) {
+				memory[3] = (entry[0] - '0') * 10 + (entry[1] - '0');
+				if (memory[3] <= 12 && memory[3] >= 1) {
+					break;
+				}
+			}
+		}
+		fgetc(stdin);
+		while (1) {
+			char entry[4] = {0};
+			fputs("Enter year (1900 - 2155): ", stdout);
+			entry[0] = fgetc(stdin);
+			entry[1] = fgetc(stdin);
+			entry[2] = fgetc(stdin);
+			entry[3] = fgetc(stdin);
+			if (
+				entry[0] <= '9' && entry[0] >= '0'
+			&&	entry[1] <= '9' && entry[1] >= '0'
+			&&	entry[2] <= '9' && entry[2] >= '0'
+			&&	entry[3] <= '9' && entry[3] >= '0'
+			) {
+				int tempYear = ((entry[0] - '0') * 1000) + ((entry[1] - '0') * 100) + ((entry[2] - '0') * 10) + (entry[3] - '0');
+				if (tempYear <= 2155 && tempYear >= 1900) {
+					memory[1] = (U8)(tempYear - 1900);
+					break;
+				}
+			}
+		}
+		printf("Calculating weekday for %d.%d.%d\n\n", memory[5], memory[3], memory[1] + 1900);
 	} else if (selected_program == PRG_count_impl_opc) {
 		opCount	= 256;
 		for (int ii = 0; ii < opCount; ii++) {
@@ -110,6 +164,8 @@ int main(int argc, char * argv[]) {
 	} else if (selected_program == PRG_KEYBOARD) {
 		loadFile(memory, "./prg/bin/kbTest.6502", mos6502_BIN);		
 	}
+
+	clearScreen();
 
 	ram = memory;
 
@@ -162,9 +218,24 @@ int main(int argc, char * argv[]) {
 		clock_gettime(CLOCK_REALTIME, &eT);
 	}
 
+	fputs("\033[?25h\033[32;1H", stdout);
+
 
 	if (selected_program == PRG_WEEKDAY) {
-		printf("Answer: %d\n\n", processor.reg.AC);
+		printf(
+			"weekday for %d.%d.%d is %d (%s)\n\n",
+			memory[5],
+			memory[3],
+			memory[1] + 1900,
+			processor.reg.AC,
+			processor.reg.AC == 1 ? "MON" :
+				processor.reg.AC == 2 ? "TUE" :
+					processor.reg.AC == 3 ? "WED" :
+						processor.reg.AC == 4 ? "THU" :
+							processor.reg.AC == 5 ? "FRI" :
+								processor.reg.AC == 6 ? "SAT" :
+									processor.reg.AC == 7 ? "SUN" : "ERR!"
+		);
 	} else if (selected_program == PRG_KEYBOARD) {
 		printf("String entered: %s\n\n", &memory[0x50]);
 	}
@@ -321,5 +392,17 @@ U8 readKeyboard() {
 		}
 	}
 	system("/bin/stty cooked");
+	fputs("\033[1D \033[1D", stdout);
 	return key;
+}
+
+void clearScreen() {
+	fputs("Beginning emulation...\n", stdout);
+	for (int rowIndex = 0; rowIndex < 30; rowIndex++) {
+		for (int colIndex = 0; colIndex < 80; colIndex++) {
+			fputc(' ', stdout);
+		}
+		fputc('\n', stdout);
+	}
+	fputs("\033[?25l\033[1;1H", stdout);
 }

@@ -321,11 +321,11 @@ U8 mos6502_handleOp(mos6502_processor_st * pProcessor) {
 	DBG_PRINT(printCurrOp(pProcessor, oldPC, opCode, operands, retCode));
 
 	if (retCode == 0xFF) {
-		printf("\n\nNon-implemented op-code %s (0x%02X)\n\n", mos6502__opCodes[opCode].mnemonic, opCode);
+		printf("\033[31;1HNon-implemented op-code %s (0x%02X)\n\n", mos6502__opCodes[opCode].mnemonic, opCode);
 	} else if (retCode == 0xFE) {
-		printf("\n\nProcessor %s by op-code 0x%02X\n\n", mos6502__opCodes[opCode].mnemonic, opCode);
+		printf("\033[31;1HProcessor %s by op-code 0x%02X\n\n", mos6502__opCodes[opCode].mnemonic, opCode);
 	} else if (opCode == 0) {
-		printf("\n\nBreak hit at 0x%04X.\n\n", oldPC);
+		printf("\033[31;1HBreak hit at 0x%04X.\n\n", oldPC);
 		return 0xFF;
 	}
 
