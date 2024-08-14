@@ -99,7 +99,7 @@ U8 mos6502_ADC(mos6502_processor_st * pProcessor, U8 opCode) {
 			return 0xFF;
 	}
 
-	memValue = pProcessor->memIf.read8(address);
+	memValue = addrm_read8(pProcessor, address);
 	pProcessor->reg.AC += memValue;
 	pProcessor->reg.AC += SR_GET_C();
 	
@@ -135,7 +135,7 @@ return cyclesPassed;
 *******************************************************************************/
 U8 mos6502_ALR(mos6502_processor_st * pProcessor, U8 opCode) {
 
-	pProcessor->reg.AC &= pProcessor->memIf.read8(addrm_imm(pProcessor));
+	pProcessor->reg.AC &= addrm_read8(pProcessor, addrm_imm(pProcessor));
 
 	SR_COND_SET_C(pProcessor->reg.AC & SR_FLAG_C);
 
@@ -157,7 +157,7 @@ U8 mos6502_ALR(mos6502_processor_st * pProcessor, U8 opCode) {
 *******************************************************************************/
 U8 mos6502_ANC(mos6502_processor_st * pProcessor, U8 opCode) {
 
-	pProcessor->reg.AC &= pProcessor->memIf.read8(addrm_imm(pProcessor));
+	pProcessor->reg.AC &= addrm_read8(pProcessor, addrm_imm(pProcessor));
 
 	SR_COND_SET_Z(pProcessor->reg.AC == 0);
 	SR_COND_SET_N(pProcessor->reg.AC & SR_FLAG_N);
@@ -227,7 +227,7 @@ U8 mos6502_AND(mos6502_processor_st * pProcessor, U8 opCode) {
 			break;
 	}
 
-	pProcessor->reg.AC = pProcessor->reg.AC & pProcessor->memIf.read8(address);
+	pProcessor->reg.AC = pProcessor->reg.AC & addrm_read8(pProcessor, address);
 
 	SR_COND_SET_N(pProcessor->reg.AC & SR_FLAG_N);
 	SR_COND_SET_Z(pProcessor->reg.AC == 0);
@@ -280,22 +280,22 @@ U8 mos6502_ASL(mos6502_processor_st * pProcessor, U8 opCode) {
 			break;
 		case 0x06: // zeropage
 			address = addrm_zpg(pProcessor);
-			origVal = pProcessor->memIf.read8(address);
+			origVal = addrm_read8(pProcessor, address);
 			cyclesPassed = 5;
 			break;
 		case 0x16: // zeropage,X
 			address = addrm_zpgX(pProcessor);
-			origVal = pProcessor->memIf.read8(address);
+			origVal = addrm_read8(pProcessor, address);
 			cyclesPassed = 6;
 			break;
 		case 0x0E: // absolute
 			address = addrm_abs(pProcessor);
-			origVal = pProcessor->memIf.read8(address);
+			origVal = addrm_read8(pProcessor, address);
 			cyclesPassed = 6;
 			break;
 		case 0x1E: // absolute,X
 			address = addrm_absX(pProcessor);
-			origVal = pProcessor->memIf.read8(address);
+			origVal = addrm_read8(pProcessor, address);
 			cyclesPassed = 7;
 			break;
 		default:
@@ -307,7 +307,7 @@ U8 mos6502_ASL(mos6502_processor_st * pProcessor, U8 opCode) {
 	if (opCode == 0x0A) {
 		pProcessor->reg.AC = shiftedVal;
 	} else {
-		pProcessor->memIf.write8(address, shiftedVal);
+		addrm_write8(pProcessor, address, shiftedVal);
 	}
 
 	SR_COND_SET_N(shiftedVal & SR_FLAG_N);
@@ -416,7 +416,7 @@ U8 mos6502_BIT(mos6502_processor_st * pProcessor, U8 opCode) {
 			return 0xFF;
 	}
 
-	memValue = pProcessor->memIf.read8(address);
+	memValue = addrm_read8(pProcessor, address);
 
 	SR_COND_SET_N(memValue & SR_FLAG_N);
 	SR_COND_SET_V(memValue & SR_FLAG_V);
@@ -507,7 +507,7 @@ U8 mos6502_BRK(mos6502_processor_st * pProcessor, U8 opCode) {
 	U8 cyclesPassed = 7;
 
 // TODO use addrm functions
-	U16 address = pProcessor->memIf.read16(0xFFFE);
+	U16 address = addrm_read16(pProcessor, 0xFFFE);
 
 	// TODO
 
@@ -676,7 +676,7 @@ U8 mos6502_CMP(mos6502_processor_st * pProcessor, U8 opCode) {
 			return 0xFF;
 	}
 
-	memValue = pProcessor->memIf.read8(address);
+	memValue = addrm_read8(pProcessor, address);
 
 	switch (opCode)
 	{
@@ -711,15 +711,15 @@ U8 mos6502_CPX(mos6502_processor_st * pProcessor, U8 opCode) {
 
 	switch (opCode) {
 		case 0xE0: // immediate
-			memValue = pProcessor->memIf.read8(addrm_imm(pProcessor));
+			memValue = addrm_read8(pProcessor, addrm_imm(pProcessor));
 			cyclesPassed = 2;
 			break;
 		case 0xE4: // zeropage
-			memValue = pProcessor->memIf.read8(addrm_zpg(pProcessor));
+			memValue = addrm_read8(pProcessor, addrm_zpg(pProcessor));
 			cyclesPassed = 3;
 			break;
 		case 0xEC: // absolute
-			memValue = pProcessor->memIf.read8(addrm_abs(pProcessor));
+			memValue = addrm_read8(pProcessor, addrm_abs(pProcessor));
 			cyclesPassed = 4;
 			break;
 		default:
@@ -749,15 +749,15 @@ U8 mos6502_CPY(mos6502_processor_st * pProcessor, U8 opCode) {
 
 	switch (opCode) {
 		case 0xC0: // immediate
-			memValue = pProcessor->memIf.read8(addrm_imm(pProcessor));
+			memValue = addrm_read8(pProcessor, addrm_imm(pProcessor));
 			cyclesPassed = 2;
 			break;
 		case 0xC4: // zeropage
-			memValue = pProcessor->memIf.read8(addrm_zpg(pProcessor));
+			memValue = addrm_read8(pProcessor, addrm_zpg(pProcessor));
 			cyclesPassed = 3;
 			break;
 		case 0xCC: // absolute
-			memValue = pProcessor->memIf.read8(addrm_abs(pProcessor));
+			memValue = addrm_read8(pProcessor, addrm_abs(pProcessor));
 			cyclesPassed = 4;
 			break;
 		default:
@@ -819,8 +819,8 @@ U8 mos6502_DEC(mos6502_processor_st * pProcessor, U8 opCode) {
 			return 0xFF;
 	}
 
-	memValue = pProcessor->memIf.read8(address) - 1;
-	pProcessor->memIf.write8(address, memValue);
+	memValue = addrm_read8(pProcessor, address) - 1;
+	addrm_write8(pProcessor, address, memValue);
 
 	SR_COND_SET_N(memValue & SR_FLAG_N);
 	SR_COND_SET_Z(memValue == 0);
@@ -915,7 +915,7 @@ U8 mos6502_EOR(mos6502_processor_st * pProcessor, U8 opCode) {
 			return 0xFF;
 	}
 
-	pProcessor->reg.AC ^= pProcessor->memIf.read8(address);
+	pProcessor->reg.AC ^= addrm_read8(pProcessor, address);
 	
 	switch (opCode) {
 		case 0x5D:
@@ -967,7 +967,7 @@ U8 mos6502_INC(mos6502_processor_st * pProcessor, U8 opCode) {
 			return 0xFF;
 	}
 	
-	pProcessor->memIf.write8(address, pProcessor->memIf.read8(address) + 1);
+	addrm_write8(pProcessor, address, addrm_read8(pProcessor, address) + 1);
 
 	SR_COND_SET_N(pProcessor->reg.AC & SR_FLAG_N);
 	SR_COND_SET_Z(pProcessor->reg.AC == 0);
@@ -1053,7 +1053,7 @@ U8 mos6502_JMP(mos6502_processor_st * pProcessor, U8 opCode) {
 			return 0xFF;
 	}
 
-	pProcessor->reg.PC = pProcessor->memIf.read16(address);
+	pProcessor->reg.PC = address;
 
 	return cyclesPassed;
 }
@@ -1152,7 +1152,7 @@ U8 mos6502_LDA(mos6502_processor_st * pProcessor, U8 opCode) {
 			return 0xFF;
 	}
 
-	pProcessor->reg.AC = pProcessor->memIf.read8(address);
+	pProcessor->reg.AC = addrm_read8(pProcessor, address);
 
 	switch (opCode) {
 		case 0xBD:
@@ -1211,7 +1211,7 @@ U8 mos6502_LDX(mos6502_processor_st * pProcessor, U8 opCode) {
 			return 0xFF;
 	}
 
-	pProcessor->reg.X = pProcessor->memIf.read8(address);
+	pProcessor->reg.X = addrm_read8(pProcessor, address);
 
 	if (opCode = 0xBE) {
 		cyclesPassed += MOS6502_OUTOFPAGE(oldPC, address);
@@ -1262,7 +1262,7 @@ U8 mos6502_LDY(mos6502_processor_st * pProcessor, U8 opCode) {
 			return 0xFF;
 	}
 
-	pProcessor->reg.Y = pProcessor->memIf.read8(address);
+	pProcessor->reg.Y = addrm_read8(pProcessor, address);
 
 	if (opCode = 0xBC) {
 		cyclesPassed += MOS6502_OUTOFPAGE(oldPC, address);
@@ -1295,22 +1295,22 @@ U8 mos6502_LSR(mos6502_processor_st * pProcessor, U8 opCode) {
 			break;
 		case 0x46: // zeropage
 			address = addrm_zpg(pProcessor);
-			origVal = pProcessor->memIf.read8(address);
+			origVal = addrm_read8(pProcessor, address);
 			cyclesPassed = 5;
 			break;
 		case 0x56: // zeropage,X
 			address = addrm_zpgX(pProcessor);
-			origVal = pProcessor->memIf.read8(address);
+			origVal = addrm_read8(pProcessor, address);
 			cyclesPassed = 6;
 			break;
 		case 0x4E: // absolute
 			address = addrm_abs(pProcessor);
-			origVal = pProcessor->memIf.read8(address);
+			origVal = addrm_read8(pProcessor, address);
 			cyclesPassed = 6;
 			break;
 		case 0x5E: // absolute,X
 			address = addrm_absX(pProcessor);
-			origVal = pProcessor->memIf.read8(address);
+			origVal = addrm_read8(pProcessor, address);
 			cyclesPassed = 7;
 			break;
 		default:
@@ -1322,7 +1322,7 @@ U8 mos6502_LSR(mos6502_processor_st * pProcessor, U8 opCode) {
 	if (opCode == 0x4A) {
 		pProcessor->reg.AC = shiftedVal;
 	} else {
-		pProcessor->memIf.write8(address, shiftedVal);
+		addrm_write8(pProcessor, address, shiftedVal);
 	}
 
 	SR_RESET_N();
@@ -1374,13 +1374,13 @@ U8 mos6502_NOP(mos6502_processor_st * pProcessor, U8 opCode) {
 		case 0xC2:
 		case 0xE2: //	immediate	2
 			cyclesPassed = 2;
-			pProcessor->memIf.read8(addrm_imm(pProcessor));
+			addrm_read8(pProcessor, addrm_imm(pProcessor));
 			break;
 		case 0x04: //	zeropage	2
 		case 0x44:
 		case 0x64: //	zeropage	2
 			cyclesPassed = 3;
-			pProcessor->memIf.read8(addrm_zpg(pProcessor));
+			addrm_read8(pProcessor, addrm_zpg(pProcessor));
 			break;
 		case 0x14: //	zeropage,X	2
 		case 0x34:
@@ -1389,11 +1389,11 @@ U8 mos6502_NOP(mos6502_processor_st * pProcessor, U8 opCode) {
 		case 0xD4:
 		case 0xF4: //	zeropage,X	2
 			cyclesPassed = 4;
-			pProcessor->memIf.read8(addrm_zpgX(pProcessor));
+			addrm_read8(pProcessor, addrm_zpgX(pProcessor));
 			break;
 		case 0x0C: //	absolute	3
 			cyclesPassed = 4;
-			pProcessor->memIf.read16(addrm_abs(pProcessor));
+			addrm_read16(pProcessor, addrm_abs(pProcessor));
 			break;
 		case 0x1C: //	absolut,X	3
 		case 0x3C:
@@ -1403,7 +1403,7 @@ U8 mos6502_NOP(mos6502_processor_st * pProcessor, U8 opCode) {
 		case 0xFC: //	absolut,X	3
 			cyclesPassed = 4 + MOS6502_OUTOFPAGE(
 				pProcessor->reg.PC,
-				pProcessor->memIf.read16(addrm_absX(pProcessor))
+				addrm_read16(pProcessor, addrm_absX(pProcessor))
 			);
 			break;
 		default:
@@ -1465,7 +1465,7 @@ U8 mos6502_ORA(mos6502_processor_st * pProcessor, U8 opCode) {
 			return 0xFF;
 	}
 
-	memValue = pProcessor->memIf.read8(address);
+	memValue = addrm_read8(pProcessor, address);
 
 	pProcessor->reg.AC |= memValue;
 
@@ -1588,22 +1588,22 @@ U8 mos6502_ROL(mos6502_processor_st * pProcessor, U8 opCode) {
 			break;
 		case 0x26:	// zeropage
 			address = addrm_zpg(pProcessor);
-			memValue = pProcessor->memIf.read8(address);
+			memValue = addrm_read8(pProcessor, address);
 			cyclesPassed = 5;
 			break;
 		case 0x36:	// zeropage,X
 			address = addrm_zpgX(pProcessor);
-			memValue = pProcessor->memIf.read8(address);
+			memValue = addrm_read8(pProcessor, address);
 			cyclesPassed = 6;
 			break;
 		case 0x2E:	// absolute
 			address = addrm_abs(pProcessor);
-			memValue = pProcessor->memIf.read8(address);
+			memValue = addrm_read8(pProcessor, address);
 			cyclesPassed = 6;
 			break;
 		case 0x3E:	// absolute,X
 			address = addrm_absX(pProcessor);
-			memValue = pProcessor->memIf.read8(address);
+			memValue = addrm_read8(pProcessor, address);
 			cyclesPassed = 7;
 			break;
 		default:
@@ -1620,7 +1620,7 @@ U8 mos6502_ROL(mos6502_processor_st * pProcessor, U8 opCode) {
 			pProcessor->reg.AC = memValue;
 			break;
 		default:
-			pProcessor->memIf.write8(address, memValue);
+			addrm_write8(pProcessor, address, memValue);
 			break;
 	}
 
@@ -1652,22 +1652,22 @@ U8 mos6502_ROR(mos6502_processor_st * pProcessor, U8 opCode) {
 			break;
 		case 0x66:	// zeropage
 			address = addrm_zpg(pProcessor);
-			memValue = pProcessor->memIf.read8(address);
+			memValue = addrm_read8(pProcessor, address);
 			cyclesPassed = 5;
 			break;
 		case 0x76:	// zeropage,X
 			address = addrm_zpgX(pProcessor);
-			memValue = pProcessor->memIf.read8(address);
+			memValue = addrm_read8(pProcessor, address);
 			cyclesPassed = 6;
 			break;
 		case 0x6E:	// absolute
 			address = addrm_abs(pProcessor);
-			memValue = pProcessor->memIf.read8(address);
+			memValue = addrm_read8(pProcessor, address);
 			cyclesPassed = 6;
 			break;
 		case 0x7E:	// absolute,X
 			address = addrm_absX(pProcessor);
-			memValue = pProcessor->memIf.read8(address);
+			memValue = addrm_read8(pProcessor, address);
 			cyclesPassed = 7;
 			break;
 		default:
@@ -1684,7 +1684,7 @@ U8 mos6502_ROR(mos6502_processor_st * pProcessor, U8 opCode) {
 			pProcessor->reg.AC = memValue;
 			break;
 		default:
-			pProcessor->memIf.write8(address, memValue);
+			addrm_write8(pProcessor, address, memValue);
 			break;
 	}
 
@@ -1805,7 +1805,7 @@ U8 mos6502_SBC(mos6502_processor_st * pProcessor, U8 opCode) {
 			return 0xFF;
 	}
 
-	memValue = pProcessor->memIf.read8(address);
+	memValue = addrm_read8(pProcessor, address);
 	pProcessor->reg.AC += ~memValue;
 	pProcessor->reg.AC += SR_GET_C();
 
@@ -1994,7 +1994,7 @@ U8 mos6502_STA(mos6502_processor_st * pProcessor, U8 opCode) {
 			return 0xFF;
 	}
 
-	pProcessor->memIf.write8(address, pProcessor->reg.AC);
+	addrm_write8(pProcessor, address, pProcessor->reg.AC);
 
 	return cyclesPassed;
 }
@@ -2016,19 +2016,19 @@ U8 mos6502_STX(mos6502_processor_st * pProcessor, U8 opCode) {
 			address = addrm_zpg(pProcessor);
 			cyclesPassed = 3;
 			break;
-		case 0x8E: // zeropage,Y
-			address = addrm_zpgY(pProcessor);
+		case 0x8E: // absolute
+			address = addrm_abs(pProcessor);
 			cyclesPassed = 4;
 			break;
-		case 0x96: // absolute
-			address = addrm_abs(pProcessor);
+		case 0x96: // zeropage,Y
+			address = addrm_zpgY(pProcessor);
 			cyclesPassed = 4;
 			break;
 		default:
 			return 0xFF;
 	}
 
-	pProcessor->memIf.write8(address, pProcessor->reg.X);
+	addrm_write8(pProcessor, address, pProcessor->reg.X);
 
 	return cyclesPassed;
 }
@@ -2062,7 +2062,7 @@ U8 mos6502_STY(mos6502_processor_st * pProcessor, U8 opCode) {
 			return 0xFF;
 	}
 
-	pProcessor->memIf.write8(address, pProcessor->reg.Y);
+	addrm_write8(pProcessor, address, pProcessor->reg.Y);
 
 	return cyclesPassed;
 }

@@ -5,6 +5,18 @@
 // Non-blocking fgetc()
 #include <fcntl.h>
 
+#define US_TO_NS(_usecs)	(_usecs * 1000)
+#define MS_TO_NS(_msecs)	(US_TO_NS(_msecs) * 1000)
+#define S_TO_NS(_msecs)		(MS_TO_NS(_msecs) * 1000)
+
+#define CLOCK_FREQ 1000000
+#define SCREEN_W 40
+#define SCREEN_H 25
+#define REFRESH_RATE_NS MS_TO_NS(20)
+#define TICK_NS (unsigned int)((double)1 / (double)CLOCK_FREQ * (double)S_TO_NS(1)) //1000
+
+#define TSPEC_NSEC_MAX 999999999
+
 #define PRG_AS_ARGUMENT			0
 #define PRG_STORE_TO_MEM		1
 #define PRG_CLEAR_MEM			2
@@ -13,6 +25,7 @@
 #define PRG_count_impl_leg_opc	5
 #define PRG_ASSEMBLE			6
 #define PRG_KEYBOARD			7
+#define PRG_BLINK				8
 
 #define program PRG_AS_ARGUMENT
 
@@ -23,20 +36,20 @@ typedef enum {
 } mos6502_fileType;
 
 mos6502_addr keyboardAddr = 0xFFF0;
-
-U8 memRead8(U16 address);
-U16 memRead16(U16 address);
-void memWrite8(U16 address, U8 value);
-void memWrite16(U16 address, U16 value);
-
-U8 readKeyboard();
-
-void memDummyWrite8(mos6502_addr address, U8 value) { return; }
-void memDummyWrite16(mos6502_addr address, U16 value) { return; }
+mos6502_addr screenMemAddr = 0xF690;
+mos6502_addr screenMemSize = SCREEN_W * SCREEN_H;
 
 void loadFile(U8 * memory, const char * path, mos6502_fileType fileType);
 
-void clearScreen();
+U8 memRead(U16 address);
+void memWrite(U16 address, U8 value);
+
+U8 readKeyboard();
+
+void screenClear();
+void screenRefresh();
+
+void memDummyWrite8(mos6502_addr address, U8 value) { return; }
 
 U8 * ram;
 
@@ -80,6 +93,7 @@ int main(int argc, char * argv[]) {
 		printf("\t5 - Count implemented legal op codes\n");
 		printf("\t6 - Run the assembler\n");
 		printf("\t7 - Keyboard test, prints out 5 characters entered\n");
+		printf("\t8 - Cursor blink\n");
 		printf("\n");
 		exit(1);
 	}
@@ -98,59 +112,6 @@ int main(int argc, char * argv[]) {
 		loadFile(memory, "./prg/bin/memClear.6502", mos6502_BIN);
 	} else if (selected_program == PRG_WEEKDAY) { // Day of the week. Y = year, X = month, AC = day
 		loadFile(memory, "./prg/bin/weekday.6502", mos6502_BIN);
-		while (1) {
-			char entry[2] = {0};
-			fputs("Enter day (01 - 31): ", stdout);
-			entry[0] = fgetc(stdin);
-			entry[1] = fgetc(stdin);
-			if (
-				entry[0] <= '9' && entry[0] >= '0'
-			&&	entry[1] <= '9' && entry[1] >= '0'
-			) {
-				memory[5] = (entry[0] - '0') * 10 + (entry[1] - '0');
-				if (memory[5] <= 31 && memory[5] >= 1) {
-					break;
-				}
-			}
-		}
-		fgetc(stdin);
-		while (1) {
-			char entry[2] = {0};
-			fputs("Enter month (01 - 12): ", stdout);
-			entry[0] = fgetc(stdin);
-			entry[1] = fgetc(stdin);
-			if (
-				entry[0] <= '9' && entry[0] >= '0'
-			&&	entry[1] <= '9' && entry[1] >= '0'
-			) {
-				memory[3] = (entry[0] - '0') * 10 + (entry[1] - '0');
-				if (memory[3] <= 12 && memory[3] >= 1) {
-					break;
-				}
-			}
-		}
-		fgetc(stdin);
-		while (1) {
-			char entry[4] = {0};
-			fputs("Enter year (1900 - 2155): ", stdout);
-			entry[0] = fgetc(stdin);
-			entry[1] = fgetc(stdin);
-			entry[2] = fgetc(stdin);
-			entry[3] = fgetc(stdin);
-			if (
-				entry[0] <= '9' && entry[0] >= '0'
-			&&	entry[1] <= '9' && entry[1] >= '0'
-			&&	entry[2] <= '9' && entry[2] >= '0'
-			&&	entry[3] <= '9' && entry[3] >= '0'
-			) {
-				int tempYear = ((entry[0] - '0') * 1000) + ((entry[1] - '0') * 100) + ((entry[2] - '0') * 10) + (entry[3] - '0');
-				if (tempYear <= 2155 && tempYear >= 1900) {
-					memory[1] = (U8)(tempYear - 1900);
-					break;
-				}
-			}
-		}
-		printf("Calculating weekday for %d.%d.%d\n\n", memory[5], memory[3], memory[1] + 1900);
 	} else if (selected_program == PRG_count_impl_opc) {
 		opCount	= 256;
 		for (int ii = 0; ii < opCount; ii++) {
@@ -163,11 +124,13 @@ int main(int argc, char * argv[]) {
 		}
 	} else if (selected_program == PRG_KEYBOARD) {
 		loadFile(memory, "./prg/bin/kbTest.6502", mos6502_BIN);		
+	} else if (selected_program == PRG_BLINK) {
+		loadFile(memory, "./prg/bin/blink.6502", mos6502_BIN);
 	}
 
-	clearScreen();
-
 	ram = memory;
+
+	screenClear();
 
 	struct timespec sT, eT;
 	unsigned long totalCycles = 0;
@@ -176,10 +139,8 @@ int main(int argc, char * argv[]) {
 
 	mos6502_processor_st processor;
 
-	processor.memIf.read8 = memRead8;
-	processor.memIf.read16 = memRead16;
-	processor.memIf.write8 = memWrite8;
-	processor.memIf.write16 = memWrite16;
+	processor.memRead = memRead;
+	processor.memWrite = memWrite;
 
 	mos6502_init(&processor);
 
@@ -188,8 +149,7 @@ int main(int argc, char * argv[]) {
 	if (selected_program == PRG_count_impl_opc || selected_program == PRG_count_impl_leg_opc) {
 		U8 count = 0;
 
-		processor.memIf.write8 = memDummyWrite8;
-		processor.memIf.write16 = memDummyWrite16;
+		processor.memWrite = memDummyWrite8;
 
 		for (int ii = 0; ii < opCount; ii++) {
 			processor.reg.PC = ii;
@@ -204,11 +164,43 @@ int main(int argc, char * argv[]) {
 
 	} else {
 
+		struct timespec runTime, syncTime, refreshTime = {0};
+
 		while (retVal != 0xFF) {
+
+			time_t diff = 0;
+
+			clock_gettime(CLOCK_REALTIME, &runTime);
+
 			retVal = mos6502_handleOp(&processor);
 
 			if (retVal == 0xFF) {
+				screenRefresh();
 				break;
+			} else {
+
+				do {
+
+					clock_gettime(CLOCK_REALTIME, &syncTime);
+
+					if (syncTime.tv_nsec > runTime.tv_nsec) {
+						diff = syncTime.tv_nsec - runTime.tv_nsec;
+					} else {
+						diff = TSPEC_NSEC_MAX - (runTime.tv_nsec - syncTime.tv_nsec);
+					}
+				} while (diff < (retVal * TICK_NS));
+			}
+
+		
+			if (runTime.tv_nsec > refreshTime.tv_nsec) {
+				diff = runTime.tv_nsec - refreshTime.tv_nsec;
+			} else {
+				diff = TSPEC_NSEC_MAX - (refreshTime.tv_nsec - runTime.tv_nsec);
+			}
+
+			if (diff > REFRESH_RATE_NS) {
+				refreshTime = runTime;
+				screenRefresh();
 			}
 
 			totalOperations++;
@@ -218,7 +210,7 @@ int main(int argc, char * argv[]) {
 		clock_gettime(CLOCK_REALTIME, &eT);
 	}
 
-	fputs("\033[?25h\033[32;1H", stdout);
+	fputs("\033[?25h\033[32;1H\033[m", stdout);
 
 
 	if (selected_program == PRG_WEEKDAY) {
@@ -239,7 +231,6 @@ int main(int argc, char * argv[]) {
 	} else if (selected_program == PRG_KEYBOARD) {
 		printf("String entered: %s\n\n", &memory[0x50]);
 	}
-
 
 	time_t secsPassed, nsecsPassed = 0;
 
@@ -302,7 +293,7 @@ void loadFile(U8 * pMemory, const char * pPath, mos6502_fileType fileType) {
 		if (tempByte != EOF) {
 			pMemory[memIdx] = (U8)tempByte;
 		} else {
-			break;
+			pMemory[memIdx] = 0;
 		}
 	}
 
@@ -317,29 +308,11 @@ void loadFile(U8 * pMemory, const char * pPath, mos6502_fileType fileType) {
 *
 * Returns: Byte read from the memory.
 *******************************************************************************/
-U8 memRead8(mos6502_addr address) {
+U8 memRead(mos6502_addr address) {
 	if (address == keyboardAddr) {
 		return readKeyboard();
 	} else {
 		return ram[address];
-	}
-}
-
-/*******************************************************************************
-* Reads an address(word) from the memory.
-*
-* Arguments:
-*	address - Memory address to read from.
-*
-* Returns: Address read from the memory.
-*******************************************************************************/
-mos6502_addr memRead16(mos6502_addr address) {
-	if (address == keyboardAddr) {
-		return (memRead8(address + 1) << 8) | readKeyboard();
-	} else if (address == keyboardAddr - 1) {
-		return (readKeyboard() << 8) | memRead8(address + 1);
-	} else {
-		return memRead8(address) | (memRead8(address + 1) << 8);
 	}
 }
 
@@ -352,32 +325,20 @@ mos6502_addr memRead16(mos6502_addr address) {
 *
 * Returns: Nothing.
 *******************************************************************************/
-void memWrite8(mos6502_addr address, U8 value) {
+void memWrite(mos6502_addr address, U8 value) {
 	if (address != keyboardAddr) {
 		ram[address] = value;
 	}
 }
 
 /*******************************************************************************
-* Writes an address(word) to the memory.
+* Read one byte from the stdin without blocking.
 *
 * Arguments:
-*	address - Memory address to write to.
-*	value	- Address to be written to the memory.
+*	none
 *
-* Returns: Nothing.
+* Returns: Byte representing the key pressed on the keyboard.
 *******************************************************************************/
-void memWrite16(mos6502_addr address, U16 value) {
-	if (address == keyboardAddr) {
-		memWrite8(address + 1, (U8)(value >> 8));
-	} else if (address == keyboardAddr - 1) {
-		memWrite8(address, (U8)value);
-	} else {
-		memWrite8(address, (U8)value);
-		memWrite8(address + 1, (U8)(value >> 8));
-	}
-}
-
 U8 readKeyboard() {
 	U8 key;
 	system("/bin/stty raw");
@@ -396,13 +357,37 @@ U8 readKeyboard() {
 	return key;
 }
 
-void clearScreen() {
-	fputs("Beginning emulation...\n", stdout);
-	for (int rowIndex = 0; rowIndex < 30; rowIndex++) {
-		for (int colIndex = 0; colIndex < 80; colIndex++) {
-			fputc(' ', stdout);
-		}
-		fputc('\n', stdout);
+/*******************************************************************************
+* Clears and setups screen.
+*
+* Arguments:
+*	none
+*
+* Returns: Nothing.
+*******************************************************************************/
+void screenClear() {
+	system("clear");
+	fputs("\033[?25l\033[30;47m", stdout);
+
+	for (int memIndex = screenMemSize; memIndex != 0; memIndex--) {
+		ram[screenMemAddr + memIndex] = ' ';
 	}
-	fputs("\033[?25l\033[1;1H", stdout);
+}
+
+/*******************************************************************************
+* Refreshes screen from the screen memory.
+*
+* Arguments:
+*	none
+*
+* Returns: Nothing.
+*******************************************************************************/
+void screenRefresh() {
+	U8 * screenMem = &ram[screenMemAddr];
+	fputs("\033[1;1H", stdout);
+	for (int rowIndex = 0; rowIndex < 25; rowIndex++) {
+		for (int colIndex = 0; colIndex < 40; colIndex++) {
+			printf("\033[%d;%dH%c", rowIndex + 1, colIndex + 1, *(screenMem++));
+		}
+	}
 }

@@ -7,7 +7,7 @@
 * Macros and definitions
 *******************************************************************************/
 
-#define PRINT_DBG_INFO 1
+#define PRINT_DBG_INFO 0
 
 #if PRINT_DBG_INFO == 1
 # define DBG_PRINT(_x) _x

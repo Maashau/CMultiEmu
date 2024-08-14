@@ -7,7 +7,6 @@
 
 #include "6502_addrm.h"
 
-
 /*******************************************************************************
 * Operand is an immediate byte in the memory.
 *
@@ -31,7 +30,7 @@ mos6502_addr addrm_imm(
 mos6502_addr addrm_rel(
 	mos6502_processor_st *	pProcessor
 ) {
-	I8 offset = (I8)pProcessor->memIf.read8(addrm_imm(pProcessor));
+	I8 offset = (I8)addrm_read8(pProcessor, addrm_imm(pProcessor));
 	mos6502_addr retAddr = pProcessor->reg.PC + offset;
 
 	return retAddr;
@@ -45,7 +44,7 @@ mos6502_addr addrm_rel(
 mos6502_addr addrm_abs(
 	mos6502_processor_st *	pProcessor
 ) {
-	mos6502_addr retAddr = pProcessor->memIf.read16(pProcessor->reg.PC);
+	mos6502_addr retAddr = addrm_read16(pProcessor, pProcessor->reg.PC);
 
 	pProcessor->reg.PC += 2;
 
@@ -60,7 +59,7 @@ mos6502_addr addrm_abs(
 mos6502_addr addrm_absX(
 	mos6502_processor_st *	pProcessor
 ) {
-	mos6502_addr retAddr = pProcessor->memIf.read16(pProcessor->reg.PC) + pProcessor->reg.X;
+	mos6502_addr retAddr = addrm_read16(pProcessor, pProcessor->reg.PC) + pProcessor->reg.X;
 
 	pProcessor->reg.PC += 2;
 
@@ -75,7 +74,7 @@ mos6502_addr addrm_absX(
 mos6502_addr addrm_absY(
 	mos6502_processor_st *	pProcessor
 ) {	
-	mos6502_addr retAddr = pProcessor->memIf.read16(pProcessor->reg.PC) + pProcessor->reg.Y;
+	mos6502_addr retAddr = addrm_read16(pProcessor, pProcessor->reg.PC) + pProcessor->reg.Y;
 
 	pProcessor->reg.PC += 2;
 
@@ -90,7 +89,7 @@ mos6502_addr addrm_absY(
 mos6502_addr addrm_zpg(
 	mos6502_processor_st *	pProcessor
 ) {
-	U8 address = pProcessor->memIf.read8(pProcessor->reg.PC);
+	U8 address = addrm_read8(pProcessor, pProcessor->reg.PC);
 	
 	pProcessor->reg.PC++;
 	
@@ -105,7 +104,7 @@ mos6502_addr addrm_zpg(
 mos6502_addr addrm_zpgX(
 	mos6502_processor_st *	pProcessor
 ) {
-	U8 address = pProcessor->memIf.read8(pProcessor->reg.PC) + pProcessor->reg.X;
+	U8 address = addrm_read8(pProcessor, pProcessor->reg.PC) + pProcessor->reg.X;
 
 	pProcessor->reg.PC++;
 
@@ -120,7 +119,7 @@ mos6502_addr addrm_zpgX(
 mos6502_addr addrm_zpgY(
 	mos6502_processor_st *	pProcessor
 ) {
-	U8 address = pProcessor->memIf.read8(pProcessor->reg.PC) + pProcessor->reg.Y;
+	U8 address = addrm_read8(pProcessor, pProcessor->reg.PC) + pProcessor->reg.Y;
 	
 	pProcessor->reg.PC++;
 	
@@ -135,11 +134,11 @@ mos6502_addr addrm_zpgY(
 mos6502_addr addrm_ind(
 	mos6502_processor_st *	pProcessor
 ) {
-	U16 indAddress = pProcessor->memIf.read16(pProcessor->reg.PC);
+	U16 indAddress = addrm_read16(pProcessor, pProcessor->reg.PC);
 	
 	pProcessor->reg.PC += 2;
 
-	return pProcessor->memIf.read16(indAddress);
+	return addrm_read16(pProcessor, indAddress);
 }
 
 /*******************************************************************************
@@ -150,11 +149,11 @@ mos6502_addr addrm_ind(
 mos6502_addr addrm_xInd(
 	mos6502_processor_st *	pProcessor
 ) {
-	U8 indAddress = pProcessor->memIf.read8(pProcessor->reg.PC) + pProcessor->reg.X;
+	U8 indAddress = addrm_read8(pProcessor, pProcessor->reg.PC) + pProcessor->reg.X;
 	
 	pProcessor->reg.PC++;
 
-	return pProcessor->memIf.read16(indAddress);
+	return addrm_read16(pProcessor, indAddress);
 }
 
 /*******************************************************************************
@@ -165,8 +164,8 @@ mos6502_addr addrm_xInd(
 mos6502_addr addrm_indY(
 	mos6502_processor_st *	pProcessor
 ) {
-	U8 indAddress = pProcessor->memIf.read8(pProcessor->reg.PC);
-	mos6502_addr address = pProcessor->memIf.read16(indAddress) + pProcessor->reg.Y;
+	U8 indAddress = addrm_read8(pProcessor, pProcessor->reg.PC);
+	mos6502_addr address = addrm_read16(pProcessor, indAddress) + pProcessor->reg.Y;
 
 	pProcessor->reg.PC++;
 	
@@ -180,7 +179,7 @@ mos6502_addr addrm_indY(
 *******************************************************************************/
 U8 addrm_stackPop8(mos6502_processor_st * pProcessor) {
 	pProcessor->reg.SP++;
-	return pProcessor->memIf.read8(0x100 + pProcessor->reg.SP);
+	return addrm_read8(pProcessor, 0x100 + pProcessor->reg.SP);
 }
 
 /*******************************************************************************
@@ -191,7 +190,7 @@ U8 addrm_stackPop8(mos6502_processor_st * pProcessor) {
 U16 addrm_stackPop16(mos6502_processor_st * pProcessor) {
 	U16 readValue;
 	pProcessor->reg.SP++;
-	readValue = pProcessor->memIf.read16(0x100 + pProcessor->reg.SP);
+	readValue = addrm_read16(pProcessor, 0x100 + pProcessor->reg.SP);
 	pProcessor->reg.SP++;
 	return readValue;
 }
@@ -200,7 +199,7 @@ U16 addrm_stackPop16(mos6502_processor_st * pProcessor) {
 * Push a byte to stack.
 *******************************************************************************/
 void addrm_stackPush8(mos6502_processor_st * pProcessor, U8 value) {
-	pProcessor->memIf.write8(0x100 + pProcessor->reg.SP, value);
+	addrm_write8(pProcessor, 0x100 + pProcessor->reg.SP, value);
 	pProcessor->reg.SP--;
 }
 
@@ -209,6 +208,22 @@ void addrm_stackPush8(mos6502_processor_st * pProcessor, U8 value) {
 *******************************************************************************/
 void addrm_stackPush16(mos6502_processor_st * pProcessor, U16 value) {
 	pProcessor->reg.SP--;
-	pProcessor->memIf.write16(0x100 + pProcessor->reg.SP, value);
+	addrm_write16(pProcessor, 0x100 + pProcessor->reg.SP, value);
 	pProcessor->reg.SP--;
+}
+
+U8 addrm_read8(mos6502_processor_st * pProcessor, mos6502_addr address) {
+	return pProcessor->memRead(address);
+}
+
+U16 addrm_read16(mos6502_processor_st * pProcessor, mos6502_addr address) {
+	return pProcessor->memRead(address) | (pProcessor->memRead(address + 1) << 8);
+}
+
+void addrm_write8(mos6502_processor_st * pProcessor, mos6502_addr address, U8 value) {
+	pProcessor->memWrite(address, value);
+}
+void addrm_write16(mos6502_processor_st * pProcessor, mos6502_addr address, U16 value) {
+	pProcessor->memWrite(address, (U8)(value & 0xFF));
+	pProcessor->memWrite(address + 1, (U8)((value >> 8) & 0xFF));
 }

@@ -22,3 +22,8 @@ U8 addrm_stackPop8(mos6502_processor_st * processor);
 U16 addrm_stackPop16(mos6502_processor_st * processor);
 void addrm_stackPush8(mos6502_processor_st * processor, U8 value);
 void addrm_stackPush16(mos6502_processor_st * processor, U16 value);
+
+U8 addrm_read8(mos6502_processor_st * pProcessor, mos6502_addr address);
+U16 addrm_read16(mos6502_processor_st * pProcessor, mos6502_addr address);
+void addrm_write8(mos6502_processor_st * pProcessor, mos6502_addr address, U8 value);
+void addrm_write16(mos6502_processor_st * pProcessor, mos6502_addr address, U16 value);

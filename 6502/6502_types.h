@@ -19,22 +19,14 @@ typedef struct {
 	U8 SP;
 } mos6502_reg_st;
 
-typedef U8				(*mos6502_memRead8)(mos6502_addr address);
-typedef mos6502_addr	(*mos6502_memRead16)(mos6502_addr address);
-typedef void			(*mos6502_memWrite8)(mos6502_addr address, U8 value);
-typedef void			(*mos6502_memWrite16)(mos6502_addr address, U16 value);
+typedef U8				(*mos6502_memRead)(mos6502_addr address);
+typedef void			(*mos6502_memWrite)(mos6502_addr address, U8 value);
 
 typedef struct {
-	mos6502_memRead8	read8;
-	mos6502_memRead16	read16;
-	mos6502_memWrite8	write8;
-	mos6502_memWrite16	write16;
-} mos6502_memInterface_st;
-
-typedef struct {
-	mos6502_reg_st reg;
-	mos6502_memInterface_st memIf;
-	U64 cycleCount;
+	mos6502_reg_st		reg;
+	mos6502_memRead		memRead;
+	mos6502_memWrite	memWrite;
+	U64					cycleCount;
 } mos6502_processor_st;
 
 enum {

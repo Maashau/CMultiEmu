@@ -310,22 +310,25 @@ U8 mos6502_handleOp(mos6502_processor_st * pProcessor) {
 	U8 operands[2];
 
 	/* Read operands for debug printing. */
-	operands[0] = pProcessor->memIf.read8(pProcessor->reg.PC + 1);
-	operands[1] = pProcessor->memIf.read8(pProcessor->reg.PC + 2);
+	operands[0] = addrm_read8(pProcessor, pProcessor->reg.PC + 1);
+	operands[1] = addrm_read8(pProcessor, pProcessor->reg.PC + 2);
 
 	/* Handle instruction. */
-	U8 opCode = pProcessor->memIf.read8(addrm_imm(pProcessor));
+	U8 opCode = addrm_read8(pProcessor, addrm_imm(pProcessor));
 	U8 retCode = mos6502__opCodes[opCode].handler(pProcessor, opCode);
 	pProcessor->cycleCount += retCode;
 
 	DBG_PRINT(printCurrOp(pProcessor, oldPC, opCode, operands, retCode));
 
 	if (retCode == 0xFF) {
-		printf("\033[31;1HNon-implemented op-code %s (0x%02X)\n\n", mos6502__opCodes[opCode].mnemonic, opCode);
+		printf("\033[26;1HNon-implemented op-code %s (0x%02X)\n\n", mos6502__opCodes[opCode].mnemonic, opCode);
+		fgetc(stdin);
 	} else if (retCode == 0xFE) {
-		printf("\033[31;1HProcessor %s by op-code 0x%02X\n\n", mos6502__opCodes[opCode].mnemonic, opCode);
+		printf("\033[26;1HProcessor %s by op-code 0x%02X\n\n", mos6502__opCodes[opCode].mnemonic, opCode);
+		fgetc(stdin);
 	} else if (opCode == 0) {
-		printf("\033[31;1HBreak hit at 0x%04X.\n\n", oldPC);
+		printf("\033[26;1HBreak hit at 0x%04X.\n\n", oldPC);
+		fgetc(stdin);
 		return 0xFF;
 	}
 
