@@ -9,10 +9,14 @@
 #define MS_TO_NS(_msecs)	(US_TO_NS(_msecs) * 1000)
 #define S_TO_NS(_msecs)		(MS_TO_NS(_msecs) * 1000)
 
+#define NS_TO_US(_nsecs)	(_nsecs / 1000)
+#define NS_TO_MS(_nsecs)	(NS_TO_US(_nsecs) / 1000)
+
 #define CLOCK_FREQ 1000000
 #define SCREEN_W 40
 #define SCREEN_H 25
 #define REFRESH_RATE_NS MS_TO_NS(20)
+#define KB_SCAN_RATE_NS	MS_TO_NS(10)
 #define TICK_NS (unsigned int)((double)1 / (double)CLOCK_FREQ * (double)S_TO_NS(1)) //1000
 
 #define TSPEC_NSEC_MAX 999999999
@@ -144,8 +148,6 @@ int main(int argc, char * argv[]) {
 
 	mos6502_init(&processor);
 
-	clock_gettime(CLOCK_REALTIME, &sT);
-
 	if (selected_program == PRG_count_impl_opc || selected_program == PRG_count_impl_leg_opc) {
 		U8 count = 0;
 
@@ -164,8 +166,13 @@ int main(int argc, char * argv[]) {
 
 	} else {
 
-		struct timespec runTime, syncTime, refreshTime = {0};
+		struct timespec runTime, syncTime, refreshTime = {0}, kbScanTime = {0};
 
+		fcntl(0, F_SETFL, O_NONBLOCK);
+		system("/bin/stty raw");
+
+		clock_gettime(CLOCK_REALTIME, &sT);
+		
 		while (retVal != 0xFF) {
 
 			time_t diff = 0;
@@ -188,6 +195,7 @@ int main(int argc, char * argv[]) {
 					} else {
 						diff = TSPEC_NSEC_MAX - (runTime.tv_nsec - syncTime.tv_nsec);
 					}
+
 				} while (diff < (retVal * TICK_NS));
 			}
 
@@ -199,8 +207,21 @@ int main(int argc, char * argv[]) {
 			}
 
 			if (diff > REFRESH_RATE_NS) {
+
 				refreshTime = runTime;
 				screenRefresh();
+			}
+
+			if (runTime.tv_nsec > kbScanTime.tv_nsec) {
+				diff = runTime.tv_nsec - kbScanTime.tv_nsec;
+			} else {
+				diff = TSPEC_NSEC_MAX - (kbScanTime.tv_nsec - runTime.tv_nsec);
+			}
+
+			if (diff > KB_SCAN_RATE_NS) {
+
+				kbScanTime = runTime;
+				ram[keyboardAddr] = readKeyboard();
 			}
 
 			totalOperations++;
@@ -208,6 +229,8 @@ int main(int argc, char * argv[]) {
 			//getc(stdin);
 		}
 		clock_gettime(CLOCK_REALTIME, &eT);
+
+		system("/bin/stty cooked");
 	}
 
 	fputs("\033[?25h\033[32;1H\033[m", stdout);
@@ -240,8 +263,8 @@ int main(int argc, char * argv[]) {
 		secsPassed--;
 	}
 
-	if (eT.tv_nsec < sT.tv_nsec) {
-		nsecsPassed = 100000000 - (sT.tv_nsec + eT.tv_nsec);
+	if (sT.tv_nsec > eT.tv_nsec) {
+		nsecsPassed = TSPEC_NSEC_MAX - (sT.tv_nsec - eT.tv_nsec);
 	} else {
 		nsecsPassed = eT.tv_nsec - sT.tv_nsec;
 	}
@@ -250,14 +273,14 @@ int main(int argc, char * argv[]) {
 		"Operations performed: %d\n\n Start time: %ds %dms %dns\n   End time: %ds %dms %dns\n\n Difference: %ds %dms %dns\n\nCycle count: %llu\n\n",
 		totalOperations,
 		0,
-		sT.tv_nsec / 1000000,
-		sT.tv_nsec - (sT.tv_nsec / 1000000 * 1000000),
+		NS_TO_MS(sT.tv_nsec),
+		sT.tv_nsec - MS_TO_NS(NS_TO_MS(sT.tv_nsec)),
 		eT.tv_sec - sT.tv_sec,
-		eT.tv_nsec / 1000000,
-		eT.tv_nsec - (eT.tv_nsec / 1000000 * 1000000),
+		NS_TO_MS(eT.tv_nsec),
+		eT.tv_nsec - MS_TO_NS(NS_TO_MS(eT.tv_nsec)),
 		secsPassed,
-		nsecsPassed / 1000000,
-		nsecsPassed - (nsecsPassed / 1000000 * 1000000),
+		NS_TO_MS(nsecsPassed),
+		nsecsPassed - MS_TO_NS(NS_TO_MS(nsecsPassed)),
 		processor.cycleCount
 	);
 }
@@ -309,11 +332,7 @@ void loadFile(U8 * pMemory, const char * pPath, mos6502_fileType fileType) {
 * Returns: Byte read from the memory.
 *******************************************************************************/
 U8 memRead(mos6502_addr address) {
-	if (address == keyboardAddr) {
-		return readKeyboard();
-	} else {
-		return ram[address];
-	}
+	return ram[address];
 }
 
 /*******************************************************************************
@@ -341,18 +360,9 @@ void memWrite(mos6502_addr address, U8 value) {
 *******************************************************************************/
 U8 readKeyboard() {
 	U8 key;
-	system("/bin/stty raw");
-	fcntl(0, F_SETFL, O_NONBLOCK);
+	
 	key = fgetc(stdin);
 
-	while(1) {
-
-		U8 tempKey = fgetc(stdin);
-		if (tempKey != key || tempKey == 0xFF) {
-			break;
-		}
-	}
-	system("/bin/stty cooked");
 	fputs("\033[1D \033[1D", stdout);
 	return key;
 }
