@@ -5,7 +5,7 @@ OBJ=obj
 LIB=lib
 ASMDIR=./prg
 
-all : $(LIB) $(OBJ) test_6502.out
+all : $(LIB) $(OBJ) test_6502.out assemble
 
 assemble :
 	make -C $(ASMDIR) $(SEL_ASM) -B
