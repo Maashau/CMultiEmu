@@ -13,7 +13,7 @@
 #define NS_TO_MS(_nsecs)	(NS_TO_US(_nsecs) / 1000)
 
 #define CLOCK_FREQ 1000000
-#define SCREEN_W 40
+#define SCREEN_W 60
 #define SCREEN_H 25
 #define REFRESH_RATE_NS MS_TO_NS(20)
 #define KB_SCAN_RATE_NS	MS_TO_NS(10)
@@ -33,6 +33,16 @@
 
 #define program PRG_AS_ARGUMENT
 
+#if PRINT_DBG_INFO
+#define SUPPRESS_SCREEN(_x)
+#else
+#define SUPPRESS_SCREEN(_x) _x
+#endif
+
+#define BLACK_BLACK "\033[30;40m"
+#define GRAY_BLACK "\033[30;47m"
+
+
 typedef enum {
 	mos6502_BIN,
 	mos6502_HEX,
@@ -45,8 +55,8 @@ mos6502_addr screenMemSize = SCREEN_W * SCREEN_H;
 
 void loadFile(U8 * memory, const char * path, mos6502_fileType fileType);
 
-U8 memRead(U16 address);
-void memWrite(U16 address, U8 value);
+U8 fnMemRead(U16 address);
+void fnMemWrite(U16 address, U8 value);
 
 U8 readKeyboard();
 
@@ -134,24 +144,21 @@ int main(int argc, char * argv[]) {
 
 	ram = memory;
 
-	screenClear();
+	SUPPRESS_SCREEN(screenClear());
 
-	struct timespec sT, eT;
+	struct timespec startTime, endTime;
 	unsigned long totalCycles = 0;
 	unsigned long totalOperations = 0;
 	U8 retVal = 0;
 
 	mos6502_processor_st processor;
 
-	processor.memRead = memRead;
-	processor.memWrite = memWrite;
-
-	mos6502_init(&processor);
+	mos6502_init(&processor, fnMemRead, fnMemWrite);
 
 	if (selected_program == PRG_count_impl_opc || selected_program == PRG_count_impl_leg_opc) {
 		U8 count = 0;
 
-		processor.memWrite = memDummyWrite8;
+		processor.fnMemWrite = memDummyWrite8;
 
 		for (int ii = 0; ii < opCount; ii++) {
 			processor.reg.PC = ii;
@@ -168,10 +175,10 @@ int main(int argc, char * argv[]) {
 
 		struct timespec runTime, syncTime, refreshTime = {0}, kbScanTime = {0};
 
-		fcntl(0, F_SETFL, O_NONBLOCK);
-		system("/bin/stty raw");
+		SUPPRESS_SCREEN(fcntl(0, F_SETFL, O_NONBLOCK));
+		SUPPRESS_SCREEN(system("/bin/stty raw"));
 
-		clock_gettime(CLOCK_REALTIME, &sT);
+		clock_gettime(CLOCK_REALTIME, &startTime);
 		
 		while (retVal != 0xFF) {
 
@@ -182,7 +189,7 @@ int main(int argc, char * argv[]) {
 			retVal = mos6502_handleOp(&processor);
 
 			if (retVal == 0xFF) {
-				screenRefresh();
+				SUPPRESS_SCREEN(screenRefresh());
 				break;
 			} else {
 
@@ -209,7 +216,7 @@ int main(int argc, char * argv[]) {
 			if (diff > REFRESH_RATE_NS) {
 
 				refreshTime = runTime;
-				screenRefresh();
+				SUPPRESS_SCREEN(screenRefresh());
 			}
 
 			if (runTime.tv_nsec > kbScanTime.tv_nsec) {
@@ -221,16 +228,16 @@ int main(int argc, char * argv[]) {
 			if (diff > KB_SCAN_RATE_NS) {
 
 				kbScanTime = runTime;
-				ram[keyboardAddr] = readKeyboard();
+				SUPPRESS_SCREEN(ram[keyboardAddr] = readKeyboard());
 			}
 
 			totalOperations++;
 
 			//getc(stdin);
 		}
-		clock_gettime(CLOCK_REALTIME, &eT);
+		clock_gettime(CLOCK_REALTIME, &endTime);
 
-		system("/bin/stty cooked");
+		SUPPRESS_SCREEN(system("/bin/stty cooked"));
 	}
 
 	fputs("\033[?25h\033[32;1H\033[m", stdout);
@@ -252,32 +259,32 @@ int main(int argc, char * argv[]) {
 									processor.reg.AC == 7 ? "SUN" : "ERR!"
 		);
 	} else if (selected_program == PRG_KEYBOARD) {
-		printf("String entered: %s\n\n", &memory[0x50]);
+		printf("String entered: %s\n\n", &memory[screenMemAddr]);
 	}
 
 	time_t secsPassed, nsecsPassed = 0;
 
-	secsPassed = eT.tv_sec - sT.tv_sec;
+	secsPassed = endTime.tv_sec - startTime.tv_sec;
 
-	if (secsPassed != 0 && (eT.tv_nsec < sT.tv_nsec)) {
+	if (secsPassed != 0 && (endTime.tv_nsec < startTime.tv_nsec)) {
 		secsPassed--;
 	}
 
-	if (sT.tv_nsec > eT.tv_nsec) {
-		nsecsPassed = TSPEC_NSEC_MAX - (sT.tv_nsec - eT.tv_nsec);
+	if (startTime.tv_nsec > endTime.tv_nsec) {
+		nsecsPassed = TSPEC_NSEC_MAX - (startTime.tv_nsec - endTime.tv_nsec);
 	} else {
-		nsecsPassed = eT.tv_nsec - sT.tv_nsec;
+		nsecsPassed = endTime.tv_nsec - startTime.tv_nsec;
 	}
 
 	printf(
 		"Operations performed: %d\n\n Start time: %ds %dms %dns\n   End time: %ds %dms %dns\n\n Difference: %ds %dms %dns\n\nCycle count: %llu\n\n",
 		totalOperations,
 		0,
-		NS_TO_MS(sT.tv_nsec),
-		sT.tv_nsec - MS_TO_NS(NS_TO_MS(sT.tv_nsec)),
-		eT.tv_sec - sT.tv_sec,
-		NS_TO_MS(eT.tv_nsec),
-		eT.tv_nsec - MS_TO_NS(NS_TO_MS(eT.tv_nsec)),
+		NS_TO_MS(startTime.tv_nsec),
+		startTime.tv_nsec - MS_TO_NS(NS_TO_MS(startTime.tv_nsec)),
+		endTime.tv_sec - startTime.tv_sec,
+		NS_TO_MS(endTime.tv_nsec),
+		endTime.tv_nsec - MS_TO_NS(NS_TO_MS(endTime.tv_nsec)),
 		secsPassed,
 		NS_TO_MS(nsecsPassed),
 		nsecsPassed - MS_TO_NS(NS_TO_MS(nsecsPassed)),
@@ -331,7 +338,7 @@ void loadFile(U8 * pMemory, const char * pPath, mos6502_fileType fileType) {
 *
 * Returns: Byte read from the memory.
 *******************************************************************************/
-U8 memRead(mos6502_addr address) {
+U8 fnMemRead(mos6502_addr address) {
 	return ram[address];
 }
 
@@ -344,7 +351,7 @@ U8 memRead(mos6502_addr address) {
 *
 * Returns: Nothing.
 *******************************************************************************/
-void memWrite(mos6502_addr address, U8 value) {
+void fnMemWrite(mos6502_addr address, U8 value) {
 	if (address != keyboardAddr) {
 		ram[address] = value;
 	}
@@ -360,10 +367,11 @@ void memWrite(mos6502_addr address, U8 value) {
 *******************************************************************************/
 U8 readKeyboard() {
 	U8 key;
+	printf("\033[1;%dH%s", SCREEN_W + 2, BLACK_BLACK);
 	
 	key = fgetc(stdin);
 
-	fputs("\033[1D \033[1D", stdout);
+	//printf("\033[1D \033[1D%s", GRAY_BLACK);
 	return key;
 }
 
@@ -377,7 +385,7 @@ U8 readKeyboard() {
 *******************************************************************************/
 void screenClear() {
 	system("clear");
-	fputs("\033[?25l\033[30;47m", stdout);
+	printf("\033[?25l%s", GRAY_BLACK);
 
 	for (int memIndex = screenMemSize; memIndex != 0; memIndex--) {
 		ram[screenMemAddr + memIndex] = ' ';
@@ -393,11 +401,18 @@ void screenClear() {
 * Returns: Nothing.
 *******************************************************************************/
 void screenRefresh() {
+
 	U8 * screenMem = &ram[screenMemAddr];
+	U8 screenLine[SCREEN_W + 1];
+
+	screenLine[SCREEN_W] = '\0';
+
 	fputs("\033[1;1H", stdout);
-	for (int rowIndex = 0; rowIndex < 25; rowIndex++) {
-		for (int colIndex = 0; colIndex < 40; colIndex++) {
-			printf("\033[%d;%dH%c", rowIndex + 1, colIndex + 1, *(screenMem++));
+
+	for (int rowIndex = 0; rowIndex < SCREEN_H; rowIndex++) {
+		for (int colIndex = 0; colIndex < SCREEN_W; colIndex++) {
+			screenLine[colIndex] = *(screenMem++);
 		}
+		printf("%s\033[%d;1H%s%s", GRAY_BLACK, rowIndex + 1, screenLine, BLACK_BLACK);
 	}
 }

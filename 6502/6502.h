@@ -23,6 +23,10 @@
 /*******************************************************************************
 * Public functions
 *******************************************************************************/
-void mos6502_init(mos6502_processor_st * pProcessor);
+void mos6502_init(
+    mos6502_processor_st *  pProcessor,
+    mos6502_memRead         fnMemRead,
+    mos6502_memWrite        fnMemWrite
+);
 U8 mos6502_handleOp(mos6502_processor_st * pProcessor);
 void mos6502_assemble(char * asmFilePath, U8 * memory);

@@ -1,14 +1,14 @@
 ; Definitions.
-SCRMEM	EQU		$F690
-KBMEM	EQU		$FFF0
-CURLOC	EQU		$F6B8
+SCRMEM = $F690
+KBMEM = $FFF0
+CURLOC = $F6CC
 
 ; Entry point.
-		* = $0000
+.ORG $0000
 		LDY		#0
 		LDX		TEXT
 		JSR		PRTTXT
-LOOP1	JSR		GETINP
+LOOP1:	JSR		GETINP
 		STA		TMPAC
 		CMP		#$1B	; ESC
 		BEQ		END
@@ -16,21 +16,21 @@ LOOP1	JSR		GETINP
 		BNE		NOBS
 		DEY
 		LDA		#$20
-NOBS	JSR		PRTCHR
+NOBS:	JSR		PRTCHR
 		LDX		#0
 		LDA		TMPAC
 		CMP		#$7F
 		BNE		SKIP
 		LDX		#1
-SKIP	JSR		DEBNC
+SKIP:	JSR		DEBNC
 		CPX		#1
 		BEQ		LOOP1
 		INY
 		JMP		LOOP1
-END		BRK
+END:	BRK
 
 ; Print text with X as length/index.
-PRTTXT	LDA		TEXT,X
+PRTTXT:	LDA		TEXT,X
 		DEX
 		STA		SCRMEM,X
 		CPX		#$00
@@ -38,21 +38,21 @@ PRTTXT	LDA		TEXT,X
 		RTS
 
 ; Print character stored in AC.
-PRTCHR	STA		CURLOC,Y
+PRTCHR:	STA		CURLOC,Y
 		RTS
 
 ; Get pressed key to AC.
-GETKB	LDA		KBMEM
+GETKB:	LDA		KBMEM
 		RTS
 
 ; Get user input and blink cursor.
-GETINP	LDA		#$5F		; Underscore
-BLINK	STA		CURLOC,Y
+GETINP:	LDA		#$5F		; Underscore
+BLINK:	STA		CURLOC,Y
 		STA		TMPAC
 		STY		TMPY
 		LDY		#74
 		LDX		#250
-DELAY	JSR		GETKB
+DELAY:	JSR		GETKB
 		CMP		#$FF
 		BNE		GETEND
 		DEX
@@ -67,7 +67,7 @@ DELAY	JSR		GETKB
 		BNE		GETINP
 		LDA		#$20		; Space
 		JMP		BLINK
-GETEND	LDY		TMPY
+GETEND:	LDY		TMPY
 		STA		TMPAC
 		LDA		#$20
 		STA		CURLOC,Y
@@ -75,16 +75,16 @@ GETEND	LDY		TMPY
 		RTS
 
 ; Debounce keyboard
-DEBNC	STA		TMPAC
-RETRY	JSR		GETKB
+DEBNC:	STA		TMPAC
+RETRY:	JSR		GETKB
 		CMP		#$FF
 		BEQ		BNCD
 		CMP		TMPAC
 		BEQ		RETRY
-BNCD	RTS
+BNCD:	RTS
 
 ; Data.
-TMPAC	.BYTE	0
-TMPY	.BYTE	0
-TEXT	.BYTE	24
-		.ASCII	"Write test (ESC to quit)"
+TMPAC:	.BYTE	0
+TMPY:	.BYTE	0
+TEXT:	.BYTE	24
+		.BYTE	"Write test (ESC to quit)"

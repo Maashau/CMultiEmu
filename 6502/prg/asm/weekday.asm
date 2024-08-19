@@ -1,74 +1,38 @@
-        * = $0000
-        LDX TXTY
-        JSR PRTX
-        LDA TXTY
-        ADC #1
-        JSR GETC
+; Input: Y = year (0=1900, 1=1901, ..., 255=2155)
+;        X = month (1=Jan, 2=Feb, ..., 12=Dec)
+;        A = day (1 to 31)
+;
+; Output: Weekday in A (0=Sunday, 1=Monday, ..., 6=Saturday)
+
+; Entry point
+.ORG $0000
+        LDY     #124
+        LDX     #8
+        LDA     #19
+        JSR     WEEKDAY
         BRK
-        LDY #$78
-        LDX #$03
-        LDA #$07
-        JSR L000D
-L0009	BRK
-        JMP L0009
-L000D	CPX #$03
-        BCS L0012
-        DEY
-L0012	EOR #$7F
-        CPY #$C8
-        ADC $0031,X
-        STA $0040
-        TYA
-        JSR L002D
-        SBC $0040
-        STA $0040
-        TYA
-        LSR A
-        LSR A
-        CLC
-        ADC $0040
-L002D	ADC #$07
-        BCC L002D
+
+WEEKDAY:
+        CPX #3          ; Year starts in March to bypass
+        BCS MARCH       ; leap year problem
+        DEY             ; If Jan or Feb, decrement year
+MARCH:  EOR #$7F        ; Invert A so carry works right
+        CPY #200        ; Carry will be 1 if 22nd century
+        ADC MTAB-1,X    ; A is now day+month offset
+        STA TMP
+        TYA             ; Get the year
+        JSR MOD7        ; Do a modulo to prevent overflow
+        SBC TMP         ; Combine with day+month
+        STA TMP
+        TYA             ; Get the year again
+        LSR             ; Divide it by 4
+        LSR
+        CLC             ; Add it to y+m+d and fall through
+        ADC TMP
+MOD7:   ADC #7          ; Returns (A+3) modulo 7
+        BCC MOD7        ; for A in 0..255
         RTS
-        ORA ($05,X)
-        ASL $03
-        ORA ($05,X)
-        .BYTE $03	;%00000011
-        BRK
-        .BYTE $04	;%00000100
-        .BYTE $02	;%00000010
-        ASL $04
-        BRK
-PRTX	LDA TXTY,X
-        DEX
-        STA SCRMEM,X
-        CPX #$00
-        BNE PRTX
-        RTS
-GETC	TAX
-BLINK	LDA #$5F
-BLONK	STA SCRMEM,X
-        STX BSTORE
-        LDY	#50
-DELAY	LDX KBRD
-        CPX #0
-        BNE	GOTC
-        DEY
-        CPY #0
-        BNE DELAY
-        LDX BSTORE
-        CMP #$5F
-        BNE BLINK
-        LDA #$20
-        JMP BLONK
-GOTC	RTS
-BSTORE	.BYTE 0
-TXTY	.BYTE 10
-        .ASCII "ENTER YEAR"
-TXTM	.BYTE 11
-        .ASCII "ENTER MONTH"
-TXTD	.BYTE 9
-        .ASCII "ENTER DAY"
-SCRMEM	EQU $F690
-KBRD	EQU $FFF0
-        .END
+
+; Data section.
+MTAB:   .BYTE 1,5,6,3,1,5,3,0,4,2,6,4   	; Month offsets
+TMP:    .BYTE $6                ; Temporary storage

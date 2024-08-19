@@ -1,0 +1,17 @@
+.ORG $0000
+		LDX #$05
+		LDA #$00
+		TAY
+L0005:	STA (POINTER),Y
+		INY
+		DEX
+		BNE L0005
+		
+POINTER: .BYTE $FC    ;%11111100
+		
+.ORG $00FC
+		.BYTE $01
+		.BYTE $02
+		.BYTE $03    ;%00000011
+		.BYTE $04    ;%00000100
+		.END

@@ -24,8 +24,8 @@ typedef void			(*mos6502_memWrite)(mos6502_addr address, U8 value);
 
 typedef struct {
 	mos6502_reg_st		reg;
-	mos6502_memRead		memRead;
-	mos6502_memWrite	memWrite;
+	mos6502_memRead		fnMemRead;
+	mos6502_memWrite	fnMemWrite;
 	U64					cycleCount;
 } mos6502_processor_st;
 

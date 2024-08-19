@@ -212,18 +212,31 @@ void addrm_stackPush16(mos6502_processor_st * pProcessor, U16 value) {
 	pProcessor->reg.SP--;
 }
 
+/*******************************************************************************
+* Read byte from memory.
+*******************************************************************************/
 U8 addrm_read8(mos6502_processor_st * pProcessor, mos6502_addr address) {
-	return pProcessor->memRead(address);
+	return pProcessor->fnMemRead(address);
 }
 
+/*******************************************************************************
+* Read word from memory.
+*******************************************************************************/
 U16 addrm_read16(mos6502_processor_st * pProcessor, mos6502_addr address) {
-	return pProcessor->memRead(address) | (pProcessor->memRead(address + 1) << 8);
+	return pProcessor->fnMemRead(address) | (pProcessor->fnMemRead(address + 1) << 8);
 }
 
+/*******************************************************************************
+* Write byte to memory.
+*******************************************************************************/
 void addrm_write8(mos6502_processor_st * pProcessor, mos6502_addr address, U8 value) {
-	pProcessor->memWrite(address, value);
+	pProcessor->fnMemWrite(address, value);
 }
+
+/*******************************************************************************
+* Write word to memory.
+*******************************************************************************/
 void addrm_write16(mos6502_processor_st * pProcessor, mos6502_addr address, U16 value) {
-	pProcessor->memWrite(address, (U8)(value & 0xFF));
-	pProcessor->memWrite(address + 1, (U8)((value >> 8) & 0xFF));
+	pProcessor->fnMemWrite(address, (U8)(value & 0xFF));
+	pProcessor->fnMemWrite(address + 1, (U8)((value >> 8) & 0xFF));
 }

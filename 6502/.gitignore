@@ -1,0 +1,7 @@
+a.out
+.vscode/
+lib/
+obj/
+test_6502.out
+prg/lst
+prg/bin

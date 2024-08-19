@@ -1,8 +1,14 @@
+SEL_ASM=
+
 CC=gcc
 OBJ=obj
 LIB=lib
+ASMDIR=./prg
 
 all : $(LIB) $(OBJ) test_6502.out
+
+assemble :
+	make -C $(ASMDIR) $(SEL_ASM) -B
 
 test_6502.out : $(OBJ)/main.o $(LIB)/6502.lib
 	$(CC) -o $@ $^
