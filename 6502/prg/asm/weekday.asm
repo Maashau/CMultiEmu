@@ -7,8 +7,13 @@
 CUR_LOC = $F690
 KB_MEM = $FFF0
 
-; Entry point
-.ORG $0000
+.SEGMENT "STARTUP"
+		JMP		MAIN
+
+.SEGMENT "ZEROPAGE"
+
+.SEGMENT "CODE"
+MAIN:
 		LDY		#3
 		JSR		GET_NUM
 		STA		TMPYEA
@@ -186,7 +191,7 @@ SWITCH:	STA		CUR_LOC,X
 		RTS
 
 
-; Data section.
+.SEGMENT "DATA"
 MTAB:	.BYTE 	1,5,6,3,1,5,3,0,4,2,6,4	; Month offsets
 TMP:	.BYTE 	$6						; Temporary storage
 TXTDAY:	.ASCIIZ	"Enter day of the month: "

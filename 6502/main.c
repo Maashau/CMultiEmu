@@ -31,6 +31,7 @@
 #define PRG_KEYBOARD			7
 #define PRG_BLINK				8
 #define PRG_NUMQUERY			9
+#define PRG_PRINT				10
 
 #define program PRG_AS_ARGUMENT
 
@@ -98,6 +99,10 @@ int main(int argc, char * argv[]) {
 #if program == PRG_AS_ARGUMENT
 	if (argc == 2 && *argv[1] >= '0' && *argv[1] <= '9') {
 		selected_program = *argv[1] - '0';
+		if (argv[1][1] != '\0') {
+			selected_program *= 10;
+			selected_program +=	argv[1][1] - '0';
+		}
 	} else {
 		printf("Invalid program index given as parameter\n\n");
 		printf("Valid program indexes:\n");
@@ -109,7 +114,8 @@ int main(int argc, char * argv[]) {
 		printf("\t6 - Run the assembler\n");
 		printf("\t7 - Keyboard test, prints out 5 characters entered\n");
 		printf("\t8 - Cursor blink\n");
-		printf("\t8 - Number query\n");
+		printf("\t9 - Number query\n");
+		printf("\t10 - String print test\n");
 		printf("\n");
 		exit(1);
 	}
@@ -144,6 +150,8 @@ int main(int argc, char * argv[]) {
 		loadFile(memory, "./prg/bin/blink.6502", mos6502_BIN);
 	} else if (selected_program == PRG_NUMQUERY) {
 		loadFile(memory, "./prg/bin/numQuery.6502", mos6502_BIN);
+	} else if (selected_program == PRG_PRINT) {
+		loadFile(memory, "./prg/bin/print.6502", mos6502_BIN);
 	}
 
 	ram = memory;
@@ -193,7 +201,7 @@ int main(int argc, char * argv[]) {
 			retVal = mos6502_handleOp(&processor);
 
 			if (retVal == 0xFF) {
-				SUPPRESS_SCREEN(screenRefresh());
+				//SUPPRESS_SCREEN(screenRefresh());
 				break;
 			} else {
 
@@ -391,8 +399,8 @@ void screenClear() {
 	system("clear");
 	printf("\033[?25l%s", GRAY_BLACK);
 
-	for (int memIndex = screenMemSize; memIndex != 0; memIndex--) {
-		ram[screenMemAddr + memIndex] = ' ';
+	for (int memIndex = screenMemAddr + screenMemSize; memIndex >= screenMemAddr; memIndex--) {
+		ram[memIndex] = ' ';
 	}
 }
 
@@ -411,7 +419,7 @@ void screenRefresh() {
 
 	screenLine[SCREEN_W] = '\0';
 
-	fputs("\033[1;1H", stdout);
+	printf("%s\033[1;1H", GRAY_BLACK);
 
 	for (int rowIndex = 0; rowIndex < SCREEN_H; rowIndex++) {
 		for (int colIndex = 0; colIndex < SCREEN_W; colIndex++) {

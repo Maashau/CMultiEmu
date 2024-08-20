@@ -4,19 +4,27 @@
 ;
 ; Output: Weekday in A (0=Sunday, 1=Monday, ..., 6=Saturday)
 
-CUR_LOC = $F690
+SCREEN_MEM = $F690
 KB_MEM = $FFF0
 
-; Entry point
-.ORG $0000
+.SEGMENT "STARTUP"
+		JMP		MAIN
+
+.SEGMENT "ZEROPAGE"
+
+.SEGMENT "CODE"
+MAIN:
+		LDY		#0
+		LDA		ADDR2
+		PHA
+		INY
+		LDA		ADDR2,Y
+		PHA
 		LDX		#0
-		LDA		(TXT2,X)
-		PHA
-		INX
-		LDA		(TXT2,X)
-		PHA
-		JSR		PRT_TXT
+		JSR		PRINT_STR
+		
 		LDY		#2
+		INX
 		JSR		GET_NUM
 		STA		TMP2
 		LDY		#3
@@ -24,21 +32,44 @@ KB_MEM = $FFF0
 		STA		TMP3
 		BRK
 
-; Print text with X as length/index.
-TXTSRC:	.ADDR	0
-PRT_TXT:
-		PLA
-		STA		(TXTSRC,X)
-		DEX
-		PLA
-		STA		(TXTSRC,X)
-		LDY		#0
-		LDA		(TXTSRC),Y
-TXT_LOOP:
-		STA		CUR_LOC,Y
-		LDA		(TXTSRC),Y
-		CMP		#$00
-		BNE		TXT_LOOP
+
+; Prints string from address pushed to stack to screen memory indexed by X
+; Removes string address from stack
+; Increments X
+TMP_JSR_ADDR: .ADDR 0
+PRINT_STR:
+		LDY		#1					; Pop JSR from stack
+		PLA							;
+		STA		TMP_JSR_ADDR,Y		; 
+		PLA							;
+		STA		TMP_JSR_ADDR		; 
+		LDY		#2					; Pop TXT address from stack
+		PLA							;
+		STA		LOADTXT,Y			;
+		DEY							;
+		PLA							;
+		STA		LOADTXT,Y			;
+		LDY		#1					; Push JSR back to stack
+		LDA		TMP_JSR_ADDR		;
+		PHA							;
+		LDA		TMP_JSR_ADDR,Y		;
+		PHA							;
+		DEY
+PRINT_STR_LOOP:
+LOADTXT:LDA		$FFFF,Y
+		JSR		PRINT_CHR
+		CMP		#0
+		BEQ		PRINT_STR_RET
+		INY
+		JMP		PRINT_STR_LOOP
+PRINT_STR_RET:
+		RTS
+
+; Prints A to X indexed screen memory
+; Increments X
+PRINT_CHR:
+		STA	SCREEN_MEM,X
+		INX
 		RTS
 
 ; GET_NUM
@@ -55,7 +86,7 @@ GET_NUM:
 		STA		GET_NUM_RES
 GET_NUM_LOOP:
 		JSR		GET_A_BLINK
-		STA		CUR_LOC,X
+		STA		SCREEN_MEM,X
 		SBC		#48
 		INX
 		DEY
@@ -146,7 +177,7 @@ KB_DEBOUNCED:
 ;
 ; Parameters
 ;		X = 0 ... 255 index of writable screen memory
-;		CUR_LOC = 0 index address of the writable area
+;		SCREEN_MEM = 0 index address of the writable area
 ;
 ; Returns A = Key press / 0xFF (no key pressed)
 GET_A_BLINK_TEMP: .BYTE 0
@@ -171,19 +202,19 @@ GET_A_BLINK_RET:
 		LDA		GET_A_BLINK_TEMP
 		RTS
 
-BLINK:	LDA		CUR_LOC,X
+BLINK:	LDA		SCREEN_MEM,X
 		CMP		#$5F
 		BNE		SPACE
 		LDA		#$20
 		JMP		SWITCH
 SPACE:	LDA		#$5F
-SWITCH:	STA		CUR_LOC,X
+SWITCH:	STA		SCREEN_MEM,X
 		RTS
 
 
-; Data section.
-ADDR2:	.ADDR	(TXT2)
-ADDR3:	.ADDR	(TXT3)
+.SEGMENT "DATA"
+ADDR2:	.ADDR	TXT2
+ADDR3:	.ADDR	TXT3
 TXT2:	.ASCIIZ	"Enter 2 char number: "
 TXT3:	.ASCIIZ	"Enter 3 char number: "
 TMP2:	.BYTE	0
