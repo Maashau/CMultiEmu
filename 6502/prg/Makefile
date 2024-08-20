@@ -4,13 +4,14 @@ BINDIR=./bin
 LSTDIR=./lst
 CC65DIR=
 
-all : $(OBJDIR) $(LSTDIR) $(BINDIR) blink weekday kbTest memClear memWrite
+all : $(OBJDIR) $(LSTDIR) $(BINDIR) blink weekday kbTest memClear memWrite numQuery
 
 blink : $(BINDIR)/blink.6502
 weekday : $(BINDIR)/weekday.6502
 kbTest : $(BINDIR)/kbTest.6502
 memClear : $(BINDIR)/memClear.6502
 memWrite : $(BINDIR)/memWrite.6502
+numQuery : $(BINDIR)/numQuery.6502
 
 $(BINDIR)/%.6502 : $(ASMDIR)/%.asm
 	$(info )

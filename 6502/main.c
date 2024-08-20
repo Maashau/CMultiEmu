@@ -30,6 +30,7 @@
 #define PRG_ASSEMBLE			6
 #define PRG_KEYBOARD			7
 #define PRG_BLINK				8
+#define PRG_NUMQUERY			9
 
 #define program PRG_AS_ARGUMENT
 
@@ -108,6 +109,7 @@ int main(int argc, char * argv[]) {
 		printf("\t6 - Run the assembler\n");
 		printf("\t7 - Keyboard test, prints out 5 characters entered\n");
 		printf("\t8 - Cursor blink\n");
+		printf("\t8 - Number query\n");
 		printf("\n");
 		exit(1);
 	}
@@ -140,6 +142,8 @@ int main(int argc, char * argv[]) {
 		loadFile(memory, "./prg/bin/kbTest.6502", mos6502_BIN);		
 	} else if (selected_program == PRG_BLINK) {
 		loadFile(memory, "./prg/bin/blink.6502", mos6502_BIN);
+	} else if (selected_program == PRG_NUMQUERY) {
+		loadFile(memory, "./prg/bin/numQuery.6502", mos6502_BIN);
 	}
 
 	ram = memory;
