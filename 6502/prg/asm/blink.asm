@@ -1,6 +1,6 @@
 ; Definitions.
-SCRMEM = $F690
-KBMEM = $FFF0
+.IMPORT		__SCRSTART__
+.IMPORT		__KBMEM__
 CURLOC = $F6CC
 
 .SEGMENT "STARTUP"
@@ -37,7 +37,7 @@ END:	BRK
 ; Print text with X as length/index.
 PRTTXT:	LDA		TEXT,X
 		DEX
-		STA		SCRMEM,X
+		STA		__SCRSTART__,X
 		CPX		#$00
 		BNE		PRTTXT
 		RTS
@@ -47,7 +47,7 @@ PRTCHR:	STA		CURLOC,Y
 		RTS
 
 ; Get pressed key to AC.
-GETKB:	LDA		KBMEM
+GETKB:	LDA		__KBMEM__
 		RTS
 
 ; Get user input and blink cursor.

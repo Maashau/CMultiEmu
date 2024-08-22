@@ -1,5 +1,5 @@
-CUR_LOC = $F690
-KB_MEM = $FFF0
+.IMPORT		__SCRSTART__
+.IMPORT		__KBMEM__
 
 .SEGMENT "STARTUP"
 		JMP		MAIN
@@ -12,7 +12,7 @@ MAIN:
 GETKEY:	JSR		GET_A_BLINK
 		CMP		#$FF
 		BEQ		GETKEY
-		STA		CUR_LOC,X
+		STA		__SCRSTART__,X
 		INX
 		CPX		#$05
 		BNE		GETKEY
@@ -33,11 +33,11 @@ GET_A:
 		PHA
 		LDX		GET_A_TEMP
 GET_A_LOOP:
-		LDA		KB_MEM			; Get keyboard loop
-		CMP		#$FF			;
+		LDA		__KBMEM__	; Get keyboard loop
+		CMP		#$FF		;
 		BNE		GET_A_END	;
-		DEX						;
-		CPX		#0				;
+		DEX					;
+		CPX		#0			;
 		BNE		GET_A_LOOP	; \Get keyboard loop
 GET_A_END:
 		STA		GET_A_TEMP
@@ -58,7 +58,7 @@ GET_A_DEBOUNCED:
 		JSR		GET_A
 		STA		GET_A_TEMP
 RE_KB_DEBOUNCE:
-		LDA		KB_MEM			; Debounce loop
+		LDA		__KBMEM__		; Debounce loop
 		CMP		#$FF			;
 		BEQ		KB_DEBOUNCED	;
 		CMP		GET_A_TEMP	;
@@ -74,7 +74,7 @@ KB_DEBOUNCED:
 ;
 ; Parameters
 ;		X = 0 ... 255 index of writable screen memory
-;		CUR_LOC = 0 index address of the writable area
+;		__SCRSTART__ = 0 index address of the writable area
 ;
 ; Returns A = Key press / 0xFF (no key pressed)
 GET_A_BLINK:
@@ -91,11 +91,11 @@ SKIP_BLINK:
 GET_A_BLINK_RET:
 		RTS
 
-BLINK:	LDA		CUR_LOC,X
+BLINK:	LDA		__SCRSTART__,X
 		CMP		#$5F
 		BNE		SPACE
 		LDA		#$20
 		JMP		SWITCH
 SPACE:	LDA		#$5F
-SWITCH:	STA		CUR_LOC,X
+SWITCH:	STA		__SCRSTART__,X
 		RTS

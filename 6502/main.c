@@ -41,8 +41,11 @@
 #define SUPPRESS_SCREEN(_x) _x
 #endif
 
-#define BLACK_BLACK "\033[30;40m"
-#define GRAY_BLACK "\033[30;47m"
+#define TERM_RESET		"\033[m"
+#define COLOR_BLK_BLK	"\033[30;40m"
+#define COLOR_GRY_BLK	"\033[30;47m"
+#define CURSOR_OFF		"\033[?25l"
+#define CURSOR_RESET	"\033[?25h"
 
 
 typedef enum {
@@ -201,7 +204,8 @@ int main(int argc, char * argv[]) {
 			retVal = mos6502_handleOp(&processor);
 
 			if (retVal == 0xFF) {
-				//SUPPRESS_SCREEN(screenRefresh());
+				SUPPRESS_SCREEN(screenRefresh());
+				printf(TERM_RESET);
 				break;
 			} else {
 
@@ -252,7 +256,7 @@ int main(int argc, char * argv[]) {
 		SUPPRESS_SCREEN(system("/bin/stty cooked"));
 	}
 
-	fputs("\033[?25h\033[32;1H\033[m", stdout);
+	printf("%s\033[32;1H%s", CURSOR_RESET, TERM_RESET);
 
 
 	if (selected_program == PRG_WEEKDAY) {
@@ -379,11 +383,11 @@ void fnMemWrite(mos6502_addr address, U8 value) {
 *******************************************************************************/
 U8 readKeyboard() {
 	U8 key;
-	printf("\033[1;%dH%s", SCREEN_W + 2, BLACK_BLACK);
+	printf("\033[1;%dH%s", SCREEN_W + 2, COLOR_BLK_BLK);
 	
 	key = fgetc(stdin);
 
-	//printf("\033[1D \033[1D%s", GRAY_BLACK);
+	//printf("\033[1D \033[1D%s", COLOR_GRY_BLK);
 	return key;
 }
 
@@ -397,7 +401,7 @@ U8 readKeyboard() {
 *******************************************************************************/
 void screenClear() {
 	system("clear");
-	printf("\033[?25l%s", GRAY_BLACK);
+	printf("%s%s", CURSOR_OFF, COLOR_GRY_BLK);
 
 	for (int memIndex = screenMemAddr + screenMemSize; memIndex >= screenMemAddr; memIndex--) {
 		ram[memIndex] = ' ';
@@ -419,12 +423,12 @@ void screenRefresh() {
 
 	screenLine[SCREEN_W] = '\0';
 
-	printf("%s\033[1;1H", GRAY_BLACK);
+	printf("\033[1;1H%s", COLOR_GRY_BLK);
 
 	for (int rowIndex = 0; rowIndex < SCREEN_H; rowIndex++) {
 		for (int colIndex = 0; colIndex < SCREEN_W; colIndex++) {
 			screenLine[colIndex] = *(screenMem++);
 		}
-		printf("%s\033[%d;1H%s%s", GRAY_BLACK, rowIndex + 1, screenLine, BLACK_BLACK);
+		printf("%s\033[%d;1H%s%s", COLOR_GRY_BLK, rowIndex + 1, screenLine, COLOR_BLK_BLK);
 	}
 }

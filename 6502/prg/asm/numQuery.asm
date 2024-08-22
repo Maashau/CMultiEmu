@@ -1,11 +1,5 @@
-; Input: Y = year (0=1900, 1=1901, ..., 255=2155)
-;        X = month (1=Jan, 2=Feb, ..., 12=Dec)
-;        A = day (1 to 31)
-;
-; Output: Weekday in A (0=Sunday, 1=Monday, ..., 6=Saturday)
-
-SCREEN_MEM = $F690
-KB_MEM = $FFF0
+.IMPORT		__SCRSTART__
+.IMPORT		__KBMEM__
 
 .SEGMENT "STARTUP"
 		JMP		MAIN
@@ -68,7 +62,7 @@ PRINT_STR_RET:
 ; Prints A to X indexed screen memory
 ; Increments X
 PRINT_CHR:
-		STA	SCREEN_MEM,X
+		STA		__SCRSTART__,X
 		INX
 		RTS
 
@@ -85,8 +79,8 @@ GET_NUM:
 		LDA		#0
 		STA		GET_NUM_RES
 GET_NUM_LOOP:
-		JSR		GET_A_BLINK
-		STA		SCREEN_MEM,X
+		JSR		GET_NUM_A
+		STA		__SCRSTART__,X
 		SBC		#48
 		INX
 		DEY
@@ -121,6 +115,23 @@ MULT10:	ASL
 		STA		MULT10_TEMP
 		PLA
 		RTS
+
+; GET_NUM_A
+;
+; Get ASCII number
+;
+; Parameters
+;		X = 0 ... 255 index of writable screen memory
+;
+; Returns A = ASCII number entered
+GET_NUM_A:
+		JSR		GET_A_BLINK
+		CMP		#48			; ASCII 0
+		BCC		GET_NUM_A	; Carry clear, A < 0
+		CMP		#57			; ASCII 9
+		BEQ		GET_NUM_A	; Zero set, A == 9
+		RTS
+
 ; GET_A
 ;
 ; Get keyboard key press.
@@ -136,11 +147,11 @@ GET_A:
 		PHA
 		LDX		GET_A_TEMP
 GET_A_LOOP:
-		LDA		KB_MEM			; Get keyboard loop
-		CMP		#$FF			;
+		LDA		__KBMEM__	; Get keyboard loop
+		CMP		#$FF		;
 		BNE		GET_A_END	;
-		DEX						;
-		CPX		#0				;
+		DEX					;
+		CPX		#0			;
 		BNE		GET_A_LOOP	; \Get keyboard loop
 GET_A_END:
 		STA		GET_A_TEMP
@@ -161,10 +172,10 @@ GET_A_DEBOUNCED:
 		JSR		GET_A
 		STA		GET_A_TEMP
 RE_KB_DEBOUNCE:
-		LDA		KB_MEM			; Debounce loop
+		LDA		__KBMEM__		; Debounce loop
 		CMP		#$FF			;
 		BEQ		KB_DEBOUNCED	;
-		CMP		GET_A_TEMP	;
+		CMP		GET_A_TEMP		;
 		BEQ		RE_KB_DEBOUNCE	; \Debounce loop
 KB_DEBOUNCED:
 		LDA		GET_A_TEMP
@@ -177,7 +188,7 @@ KB_DEBOUNCED:
 ;
 ; Parameters
 ;		X = 0 ... 255 index of writable screen memory
-;		SCREEN_MEM = 0 index address of the writable area
+;		__SCRSTART__ = 0 index address of the writable area
 ;
 ; Returns A = Key press / 0xFF (no key pressed)
 GET_A_BLINK_TEMP: .BYTE 0
@@ -202,13 +213,13 @@ GET_A_BLINK_RET:
 		LDA		GET_A_BLINK_TEMP
 		RTS
 
-BLINK:	LDA		SCREEN_MEM,X
+BLINK:	LDA		__SCRSTART__,X
 		CMP		#$5F
 		BNE		SPACE
 		LDA		#$20
 		JMP		SWITCH
 SPACE:	LDA		#$5F
-SWITCH:	STA		SCREEN_MEM,X
+SWITCH:	STA		__SCRSTART__,X
 		RTS
 
 

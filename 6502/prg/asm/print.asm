@@ -1,4 +1,5 @@
-SCREEN_MEM = $F690
+.IMPORT		__SCRSTART__
+
 .SEGMENT "STARTUP"
 		JMP		MAIN
 
@@ -60,7 +61,7 @@ PRINT_STR_RET:
 ; Prints A to X indexed screen memory
 ; Increments X
 PRINT_CHR:
-		STA	SCREEN_MEM,X
+		STA	__SCRSTART__,X
 		INX
 		RTS
 
