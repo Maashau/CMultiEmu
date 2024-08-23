@@ -269,6 +269,8 @@ opCode_st mos6502__opCodes[] = {
 /* 255,0xFF */	{mos6502_ISC,	"ISC",	ABX,	3}	// abs, X
 };
 
+U8 printLog;
+
 void printCurrOp(
 	mos6502_processor_st *	pProcessor,
 	mos6502_addrm			programCounter,
@@ -288,8 +290,10 @@ void printCurrOp(
 void mos6502_init(
     mos6502_processor_st *  pProcessor,
     mos6502_memRead         fnMemRead,
-    mos6502_memWrite        fnMemWrite
+    mos6502_memWrite        fnMemWrite,
+	U8						debugLog
 ) {
+	printLog = debugLog;
 
 	pProcessor->fnMemRead = fnMemRead;
 	pProcessor->fnMemWrite = fnMemWrite;
@@ -329,11 +333,11 @@ U8 mos6502_handleOp(mos6502_processor_st * pProcessor) {
 	DBG_PRINT(printCurrOp(pProcessor, oldPC, opCode, operands, retCode));
 
 	if (retCode == 0xFF) {
-		printf("\033[m\033[26;1H0x%04X: Non-implemented op-code %s (0x%02X)\n\n", oldPC, mos6502__opCodes[opCode].mnemonic, opCode);
+		printf("\033[m\n\n0x%04X: Non-implemented op-code %s (0x%02X)\n\n", oldPC, mos6502__opCodes[opCode].mnemonic, opCode);
 	} else if (retCode == 0xFE) {
-		printf("\033[m\033[26;1H0x%04X: Processor %s by op-code 0x%02X\n\n", oldPC, mos6502__opCodes[opCode].mnemonic, opCode);
+		printf("\033[m\n\n0x%04X: Processor %s by op-code 0x%02X\n\n", oldPC, mos6502__opCodes[opCode].mnemonic, opCode);
 	} else if (opCode == 0) {
-		printf("\033[m\033[26;1H0x%04X: Break hit at 0x%04X.\n\n", oldPC, oldPC);
+		printf("\033[m\n\n0x%04X: Break hit at 0x%04X.\n\n", oldPC, oldPC);
 		return 0xFF;
 	}
 

@@ -5,16 +5,19 @@
 		JMP		MAIN
 
 .SEGMENT "ZEROPAGE"
+TMP2:	.BYTE	0
+TMP3:	.BYTE	0
 
 .SEGMENT "CODE"
 MAIN:
-		LDY		#0
 		LDA		ADDR2
-		PHA
-		INY
+		LDY		#1
+		STA		STR_ADDR,Y
 		LDA		ADDR2,Y
-		PHA
+		INY
+		STA		STR_ADDR,Y
 		LDX		#0
+		LDY		#0
 		JSR		PRINT_STR
 		
 		LDY		#2
@@ -27,35 +30,17 @@ MAIN:
 		BRK
 
 
-; Prints string from address pushed to stack to screen memory indexed by X
+; Prints string from address set to STR_ADDR to screen memory indexed by X
 ; Removes string address from stack
 ; Increments X
-TMP_JSR_ADDR: .ADDR 0
 PRINT_STR:
-		LDY		#1					; Pop JSR from stack
-		PLA							;
-		STA		TMP_JSR_ADDR,Y		; 
-		PLA							;
-		STA		TMP_JSR_ADDR		; 
-		LDY		#2					; Pop TXT address from stack
-		PLA							;
-		STA		LOADTXT,Y			;
-		DEY							;
-		PLA							;
-		STA		LOADTXT,Y			;
-		LDY		#1					; Push JSR back to stack
-		LDA		TMP_JSR_ADDR		;
-		PHA							;
-		LDA		TMP_JSR_ADDR,Y		;
-		PHA							;
-		DEY
-PRINT_STR_LOOP:
-LOADTXT:LDA		$FFFF,Y
+STR_ADDR:
+		LDA		$FFFF,Y
 		JSR		PRINT_CHR
 		CMP		#0
 		BEQ		PRINT_STR_RET
 		INY
-		JMP		PRINT_STR_LOOP
+		JMP		PRINT_STR
 PRINT_STR_RET:
 		RTS
 
@@ -228,5 +213,3 @@ ADDR2:	.ADDR	TXT2
 ADDR3:	.ADDR	TXT3
 TXT2:	.ASCIIZ	"Enter 2 char number: "
 TXT3:	.ASCIIZ	"Enter 3 char number: "
-TMP2:	.BYTE	0
-TMP3:	.BYTE	0

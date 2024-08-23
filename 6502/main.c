@@ -35,11 +35,7 @@
 
 #define program PRG_AS_ARGUMENT
 
-#if PRINT_DBG_INFO
-#define SUPPRESS_SCREEN(_x)
-#else
-#define SUPPRESS_SCREEN(_x) _x
-#endif
+#define DRAW_TERM(_x) if (!debugLogging) _x
 
 #define TERM_RESET		"\033[m"
 #define COLOR_BLK_BLK	"\033[30;40m"
@@ -98,15 +94,27 @@ int main(int argc, char * argv[]) {
 	int selected_program;
 	U16 opCount = 0;
 	U8 memory[MOS6502_MEMSIZE];
+	U8 debugLogging = 0;
 
 #if program == PRG_AS_ARGUMENT
-	if (argc == 2 && *argv[1] >= '0' && *argv[1] <= '9') {
+	if (
+		argc >= 2
+	&&	*argv[1] >= '0' && *argv[1] <= '9'
+	) {
 		selected_program = *argv[1] - '0';
 		if (argv[1][1] != '\0') {
 			selected_program *= 10;
 			selected_program +=	argv[1][1] - '0';
 		}
+
+		if (argc > 2) {
+			if (argv[2][1] == 'd') {
+				debugLogging = 1;
+			}
+		}
+
 	} else {
+
 		printf("Invalid program index given as parameter\n\n");
 		printf("Valid program indexes:\n");
 		printf("\t1 - Store to memory\n");
@@ -159,7 +167,7 @@ int main(int argc, char * argv[]) {
 
 	ram = memory;
 
-	SUPPRESS_SCREEN(screenClear());
+	DRAW_TERM(screenClear());
 
 	struct timespec startTime, endTime;
 	unsigned long totalCycles = 0;
@@ -168,7 +176,7 @@ int main(int argc, char * argv[]) {
 
 	mos6502_processor_st processor;
 
-	mos6502_init(&processor, fnMemRead, fnMemWrite);
+	mos6502_init(&processor, fnMemRead, fnMemWrite, debugLogging);
 
 	if (selected_program == PRG_count_impl_opc || selected_program == PRG_count_impl_leg_opc) {
 		U8 count = 0;
@@ -190,8 +198,8 @@ int main(int argc, char * argv[]) {
 
 		struct timespec runTime, syncTime, refreshTime = {0}, kbScanTime = {0};
 
-		SUPPRESS_SCREEN(fcntl(0, F_SETFL, O_NONBLOCK));
-		SUPPRESS_SCREEN(system("/bin/stty raw"));
+		DRAW_TERM(fcntl(0, F_SETFL, O_NONBLOCK));
+		DRAW_TERM(system("/bin/stty raw"));
 
 		clock_gettime(CLOCK_REALTIME, &startTime);
 		
@@ -204,7 +212,7 @@ int main(int argc, char * argv[]) {
 			retVal = mos6502_handleOp(&processor);
 
 			if (retVal == 0xFF) {
-				SUPPRESS_SCREEN(screenRefresh());
+				DRAW_TERM(screenRefresh());
 				printf(TERM_RESET);
 				break;
 			} else {
@@ -232,7 +240,7 @@ int main(int argc, char * argv[]) {
 			if (diff > REFRESH_RATE_NS) {
 
 				refreshTime = runTime;
-				SUPPRESS_SCREEN(screenRefresh());
+				DRAW_TERM(screenRefresh());
 			}
 
 			if (runTime.tv_nsec > kbScanTime.tv_nsec) {
@@ -244,7 +252,7 @@ int main(int argc, char * argv[]) {
 			if (diff > KB_SCAN_RATE_NS) {
 
 				kbScanTime = runTime;
-				SUPPRESS_SCREEN(ram[keyboardAddr] = readKeyboard());
+				DRAW_TERM(ram[keyboardAddr] = readKeyboard());
 			}
 
 			totalOperations++;
@@ -253,7 +261,7 @@ int main(int argc, char * argv[]) {
 		}
 		clock_gettime(CLOCK_REALTIME, &endTime);
 
-		SUPPRESS_SCREEN(system("/bin/stty cooked"));
+		DRAW_TERM(system("/bin/stty cooked"));
 	}
 
 	printf("%s\033[32;1H%s", CURSOR_RESET, TERM_RESET);
