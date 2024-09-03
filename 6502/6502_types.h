@@ -57,6 +57,12 @@ typedef enum {
 	INY 	// indirectIndexed
 } mos6502_addrm;
 
+typedef enum {
+	vector_NMI		= 0xFFFA,
+	vector_RESET	= 0xFFFC,
+	vector_IRQBRK	= 0xFFFE
+} mos6502_vector;
+
 typedef U8 (*opFn)(mos6502_processor_st * processor, U8 opCodeIndex);
 
 typedef struct {

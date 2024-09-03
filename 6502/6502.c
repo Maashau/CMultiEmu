@@ -298,7 +298,7 @@ void mos6502_init(
 	pProcessor->fnMemRead = fnMemRead;
 	pProcessor->fnMemWrite = fnMemWrite;
 
-	pProcessor->reg.PC = 0;
+	pProcessor->reg.PC = addrm_read16(pProcessor, vector_RESET);
 	pProcessor->reg.AC = 0;
 	pProcessor->reg.X = 0;
 	pProcessor->reg.Y = 0;
