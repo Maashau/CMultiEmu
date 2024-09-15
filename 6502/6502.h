@@ -7,7 +7,8 @@
 * Macros and definitions
 *******************************************************************************/
 
-#define DBG_PRINT(_x) if (printLog) _x
+#define DBG_PRINT(_x) if (printLog & 1) _x
+#define DBG_LOG(_x) if (printLog & 2) _x
 
 #define U16_MAX 65535U
 #define MOS6502_MEMSIZE (U16_MAX + 1)
@@ -23,5 +24,5 @@ void mos6502_init(
     mos6502_memWrite        fnMemWrite,
     U8 debugLog
 );
-U8 mos6502_handleOp(mos6502_processor_st * pProcessor);
+void mos6502_handleOp(mos6502_processor_st * pProcessor);
 void mos6502_assemble(char * asmFilePath, U8 * memory);

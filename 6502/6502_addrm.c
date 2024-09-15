@@ -12,12 +12,14 @@
 *
 * Return: Value -> (U16)PC + 1
 *******************************************************************************/
-mos6502_addr addrm_imm(
+mos6502_addr addrm_IMM(
 	mos6502_processor_st *	pProcessor
 ) {
 	mos6502_addr retAddr = pProcessor->reg.PC;
 
 	pProcessor->reg.PC++;
+
+	pProcessor->cycles.currentOpCycles += 1;
 
 	return retAddr;
 }
@@ -27,10 +29,10 @@ mos6502_addr addrm_imm(
 *
 * Return: Value -> (U16)PC + (U8)memory[PC + 1]
 *******************************************************************************/
-mos6502_addr addrm_rel(
+mos6502_addr addrm_REL(
 	mos6502_processor_st *	pProcessor
 ) {
-	I8 offset = (I8)addrm_read8(pProcessor, addrm_imm(pProcessor));
+	I8 offset = (I8)addrm_read8(pProcessor, addrm_IMM(pProcessor));
 	mos6502_addr retAddr = pProcessor->reg.PC + offset;
 
 	return retAddr;
@@ -41,7 +43,7 @@ mos6502_addr addrm_rel(
 *
 * Return: Address -> (U16)memory[PC + 1]
 *******************************************************************************/
-mos6502_addr addrm_abs(
+mos6502_addr addrm_ABS(
 	mos6502_processor_st *	pProcessor
 ) {
 	mos6502_addr retAddr = addrm_read16(pProcessor, pProcessor->reg.PC);
@@ -56,7 +58,7 @@ mos6502_addr addrm_abs(
 *
 * Return: Address -> (U16)memory[PC + 1] + X
 *******************************************************************************/
-mos6502_addr addrm_absX(
+mos6502_addr addrm_ABX(
 	mos6502_processor_st *	pProcessor
 ) {
 	mos6502_addr retAddr = addrm_read16(pProcessor, pProcessor->reg.PC) + pProcessor->reg.X;
@@ -71,7 +73,7 @@ mos6502_addr addrm_absX(
 *
 * Return: Address -> (U16)memory[PC + 1] + Y
 *******************************************************************************/
-mos6502_addr addrm_absY(
+mos6502_addr addrm_ABY(
 	mos6502_processor_st *	pProcessor
 ) {	
 	mos6502_addr retAddr = addrm_read16(pProcessor, pProcessor->reg.PC) + pProcessor->reg.Y;
@@ -86,7 +88,7 @@ mos6502_addr addrm_absY(
 *
 * Return: Address -> (U8)memory[PC + 1]
 *******************************************************************************/
-mos6502_addr addrm_zpg(
+mos6502_addr addrm_ZPG(
 	mos6502_processor_st *	pProcessor
 ) {
 	U8 address = addrm_read8(pProcessor, pProcessor->reg.PC);
@@ -101,7 +103,7 @@ mos6502_addr addrm_zpg(
 *
 * Return: Address -> (U8)memory[PC + 1] + X
 *******************************************************************************/
-mos6502_addr addrm_zpgX(
+mos6502_addr addrm_ZPX(
 	mos6502_processor_st *	pProcessor
 ) {
 	U8 address = addrm_read8(pProcessor, pProcessor->reg.PC) + pProcessor->reg.X;
@@ -116,7 +118,7 @@ mos6502_addr addrm_zpgX(
 *
 * Return: Address -> (U8)memory[PC + 1] + Y
 *******************************************************************************/
-mos6502_addr addrm_zpgY(
+mos6502_addr addrm_ZPY(
 	mos6502_processor_st *	pProcessor
 ) {
 	U8 address = addrm_read8(pProcessor, pProcessor->reg.PC) + pProcessor->reg.Y;
@@ -131,7 +133,7 @@ mos6502_addr addrm_zpgY(
 *
 * Return: Address -> (U16)memory[(U16)memory[PC]]
 *******************************************************************************/
-mos6502_addr addrm_ind(
+mos6502_addr addrm_IND(
 	mos6502_processor_st *	pProcessor
 ) {
 	U16 indAddress = addrm_read16(pProcessor, pProcessor->reg.PC);
@@ -146,12 +148,14 @@ mos6502_addr addrm_ind(
 *
 * Return: Address -> (U16)memory[(U8)memory[PC + 1] + X]
 *******************************************************************************/
-mos6502_addr addrm_xInd(
+mos6502_addr addrm_INX(
 	mos6502_processor_st *	pProcessor
 ) {
 	U8 indAddress = addrm_read8(pProcessor, pProcessor->reg.PC) + pProcessor->reg.X;
 	
 	pProcessor->reg.PC++;
+
+	//printf("\t\tIND,X READ[0x%04X] = 0x%04X\r\n", indAddress, addrm_read8(pProcessor, indAddress));
 
 	return addrm_read16(pProcessor, indAddress);
 }
@@ -161,7 +165,7 @@ mos6502_addr addrm_xInd(
 *
 * Return: Address -> (U16)memory[(U8)memory[PC + 1]] + Y
 *******************************************************************************/
-mos6502_addr addrm_indY(
+mos6502_addr addrm_INY(
 	mos6502_processor_st *	pProcessor
 ) {
 	U8 indAddress = addrm_read8(pProcessor, pProcessor->reg.PC);
@@ -169,6 +173,8 @@ mos6502_addr addrm_indY(
 
 	pProcessor->reg.PC++;
 	
+	//printf("\t\tIND,Y READ[0x%04X] = 0x%02X\r\n", address, addrm_read8(pProcessor, address));
+
 	return address;
 }
 

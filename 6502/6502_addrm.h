@@ -6,17 +6,17 @@
 /*******************************************************************************
 * Function prototypes.
 *******************************************************************************/
-mos6502_addr addrm_imm(mos6502_processor_st * processor);
-mos6502_addr addrm_rel(mos6502_processor_st * processor);
-mos6502_addr addrm_abs(mos6502_processor_st * processor);
-mos6502_addr addrm_absX(mos6502_processor_st * processor);
-mos6502_addr addrm_absY(mos6502_processor_st * processor);
-mos6502_addr addrm_zpg(mos6502_processor_st * processor);
-mos6502_addr addrm_zpgX(mos6502_processor_st * processor);
-mos6502_addr addrm_zpgY(mos6502_processor_st * processor);
-mos6502_addr addrm_ind(mos6502_processor_st * processor);
-mos6502_addr addrm_xInd(mos6502_processor_st * processor);
-mos6502_addr addrm_indY(mos6502_processor_st * processor);
+mos6502_addr addrm_IMM(mos6502_processor_st * processor);
+mos6502_addr addrm_REL(mos6502_processor_st * processor);
+mos6502_addr addrm_ABS(mos6502_processor_st * processor);
+mos6502_addr addrm_ABX(mos6502_processor_st * processor);
+mos6502_addr addrm_ABY(mos6502_processor_st * processor);
+mos6502_addr addrm_ZPG(mos6502_processor_st * processor);
+mos6502_addr addrm_ZPX(mos6502_processor_st * processor);
+mos6502_addr addrm_ZPY(mos6502_processor_st * processor);
+mos6502_addr addrm_IND(mos6502_processor_st * processor);
+mos6502_addr addrm_INX(mos6502_processor_st * processor);
+mos6502_addr addrm_INY(mos6502_processor_st * processor);
 
 U8 addrm_stackPop8(mos6502_processor_st * processor);
 U16 addrm_stackPop16(mos6502_processor_st * processor);

@@ -4,23 +4,21 @@
 
 .SEGMENT "CODE"
 RESET:
-		LDY		#0
-		LDA		TXT1ADDR
+		LDY		#1
+		LDA		#<TXT1
 		PHA
-		INY
-		LDA		TXT1ADDR,Y
+		LDA		#>TXT1
 		PHA
 		LDX		#0
 		JSR		PRINT_STR
-		LDY		#0
-		LDA		TXT2ADDR
+		LDY		#1
+		LDA		#<TXT2
 		PHA
-		INY
-		LDA		TXT2ADDR,Y
+		LDA		#>TXT2
 		PHA
 		LDX		#60
 		JSR		PRINT_STR
-		BRK
+		JMP		*
 
 
 ; Prints string from address pushed to stack to screen memory indexed by X
@@ -47,9 +45,9 @@ PRINT_STR:
 		DEY
 PRINT_STR_LOOP:
 LOADTXT:LDA		$FFFF,Y
-		JSR		PRINT_CHR
 		CMP		#0
 		BEQ		PRINT_STR_RET
+		JSR		PRINT_CHR
 		INY
 		JMP		PRINT_STR_LOOP
 PRINT_STR_RET:
@@ -63,8 +61,6 @@ PRINT_CHR:
 		RTS
 
 .SEGMENT "DATA"
-TXT1ADDR: .ADDR   TXT1
-TXT2ADDR: .ADDR   TXT2
 TXT1: .ASCIIZ "Test text 1"
 TXT2: .ASCIIZ "Test text 2"
 

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <ctype.h>
 #include "6502.h"
@@ -22,7 +23,7 @@
 
 #define TSPEC_NSEC_MAX 999999999
 
-#define DRAW_TERM(_x) if (!debugLogging) _x
+#define DRAW_TERM(_x) if (!(debugLogging & 1)) _x
 
 #define TERM_RESET		"\033[m"
 #define COLOR_BLK_BLK	"\033[30;40m"
@@ -40,7 +41,8 @@ enum {
 	PRG_BLINK,
 	PRG_NUMQUERY,
 	PRG_PRINT,
-	PRG_WOZMON
+	PRG_WOZMON,
+	PRG_OPCODETEST
 } programList;
 
 typedef enum {
@@ -58,15 +60,37 @@ void loadFile(U8 * pMemory, U16 offset, const char * pPath, mos6502_fileType fil
 U8 fnMemRead(U16 address);
 void fnMemWrite(U16 address, U8 value);
 
-U8 readKeyboard();
+U8 readKeyboard(void);
 
-void screenClear();
-void screenRefresh();
+void screenClear(void);
+void screenRefresh(unsigned int freq);
+void terminalOutput(void);
 
 void programSelector(int selected_program, U8 * pMemory);
 void programEnd(int selected_program, U8 * pMemory, mos6502_processor_st * pProcessor);
 
+U8 timePassed(struct timespec * oldTime, struct timespec * newTime, time_t timeToPass);
+
+U8 appleKeyConv(U8 input);
+
+void logTrace(void);
+
 U8 * ram;
+
+U8 cursorX, cursorY;
+
+extern opCode_st * mos6502__opCodes;
+
+extern char * traceBuf[80];
+extern U8 traceBufIndex;
+
+extern FILE * tmpLog;
+char lineBuf[512];
+int lineBufIndex = 0;
+char inBuff[20];
+int inBuffIndex = 0;
+
+int * g_selectedProgram;
 
 /*******************************************************************************
 * Handles loading and running the program.
@@ -76,10 +100,13 @@ U8 * ram;
 int main(int argc, char * argv[]) {
 
 	int selected_program;
-	U16 opCount = 0;
 	U8 memory[MOS6502_MEMSIZE];
 	U8 debugLogging = 0;
 	time_t slowDown = 0;
+	U8 fasterSlowDown = 0;
+	U8 noSpeedLimit = 0;
+
+	g_selectedProgram = &selected_program;
 
 	if (
 		argc >= 2
@@ -97,6 +124,12 @@ int main(int argc, char * argv[]) {
 				if (argv[currArg][1] == 'd') {
 					debugLogging = 1;
 				} else if (argv[currArg][1] == 's') {
+
+					debugLogging |= 2;
+
+					fasterSlowDown = argv[currArg][2] == 'f' ? 1 : 0;
+					noSpeedLimit = argv[currArg][2] == 'n' ? 1 : 0;
+
 					if (currArg + 1 == argc
 					||	argv[currArg + 1][0] == '-'
 					) {
@@ -134,8 +167,9 @@ int main(int argc, char * argv[]) {
 		printf("\t%d - Number query\n", PRG_NUMQUERY);
 		printf("\t%d - String print test\n", PRG_PRINT);
 		printf("\t%d - Wozmon\n", PRG_WOZMON);
+		printf("\t%d - Opcode test\n", PRG_OPCODETEST);
 		printf("\n\n");
-		printf("Options:\n\t-d : Print operations.\n\t-s : Slow down\n");
+		printf("Options:\n\t-d : Print operations.\n\t-s(f/n) : Slow down 1-1000 ms/op (def 500)\n\t          f: 1-1000 us/op\n\t          n: no limit\n\n");
 		exit(1);
 
 	}
@@ -145,8 +179,8 @@ int main(int argc, char * argv[]) {
 	DRAW_TERM(screenClear());
 
 	struct timespec startTime, endTime;
-	unsigned long totalCycles = 0;
 	unsigned long totalOperations = 0;
+	time_t realizedSpeed;
 	U8 retVal = 0;
 
 	mos6502_processor_st processor;
@@ -157,76 +191,119 @@ int main(int argc, char * argv[]) {
 
 	mos6502_init(&processor, fnMemRead, fnMemWrite, debugLogging);
 
-	DRAW_TERM(fcntl(0, F_SETFL, O_NONBLOCK));
-	DRAW_TERM(system("/bin/stty raw"));
+	if (selected_program == PRG_OPCODETEST) {
+		processor.reg.PC = 0x400;
+	}
+
+	fcntl(0, F_SETFL, O_NONBLOCK);
+	system("/bin/stty raw");
 
 	clock_gettime(CLOCK_REALTIME, &startTime);
 	
 	while (retVal != 0xFF) {
 
 		time_t diff = 0;
+		unsigned int frequency = 0;
+		mos6502_addr oldPC = processor.reg.PC;
 
 		clock_gettime(CLOCK_REALTIME, &runTime);
 
-		retVal = mos6502_handleOp(&processor);
+		if (processor.cycles.currentOpCycles != 0) {
+			/* Calculate elapsed ns. */
+			if (realizedSpeed > runTime.tv_nsec) {
+				diff = TSPEC_NSEC_MAX - (realizedSpeed - runTime.tv_nsec);
+			} else {
+				diff = runTime.tv_nsec - realizedSpeed;
+			}
 
-		if (retVal == 0xFF) {
-			DRAW_TERM(screenRefresh());
-			printf(TERM_RESET);
+			frequency = (unsigned int)((double)diff / (double)retVal * (double)CLOCK_FREQ) / 1000;
+		}
+
+		realizedSpeed = runTime.tv_nsec;
+
+		mos6502_handleOp(&processor);
+
+		if (processor.reg.PC == oldPC) {
+			
+			DRAW_TERM(screenRefresh(frequency));
+
+			system("/bin/stty cooked");
+			printf("%s%s", CURSOR_RESET, TERM_RESET);
+			printf("\033[m\n\n0x%04X: Infinite loop detected!\n\n", oldPC);
 			break;
-		} else {
+		} 
 
+		/* Sync screen refreshing to 50 hz. */
+		if (timePassed(&refreshTime, &runTime, REFRESH_RATE_NS)) {
+			refreshTime = runTime;
+			
+			if (selected_program == PRG_WOZMON) {
+				DRAW_TERM(terminalOutput());
+			} else {
+				DRAW_TERM(screenRefresh(frequency));
+			}
+		}
+
+		/* Read keyboard every 10 ms. */
+		if (timePassed(&kbScanTime, &runTime, KB_SCAN_RATE_NS)) {
+			U8 pressedKey = 0;
+			kbScanTime = runTime;
+
+			pressedKey = readKeyboard();
+
+			if (pressedKey == 0x1B) {
+				system("/bin/stty cooked");
+				printf("%s%s", CURSOR_RESET, TERM_RESET);
+
+				printf("ESC key hit.\n");
+				exit(0);
+			}
+
+			if (selected_program == PRG_WOZMON) {
+
+				pressedKey = appleKeyConv(pressedKey);
+
+				if (pressedKey != 0xFF
+				&&	!(ram[0xD011] & 0x80)
+				) {
+
+					inBuff[inBuffIndex++] = pressedKey;
+					if (pressedKey == '\r') {
+						inBuff[inBuffIndex - 1] = '\0';
+						fprintf(tmpLog, "INPUT: %s\r\n", inBuff);
+						inBuffIndex = 0;
+					}
+					ram[0xD011] = 0x80;
+					ram[0xD010] = pressedKey + 0x80;
+
+				} else if (
+					pressedKey == 0xFF
+				&&	ram[0xD011] & 0x80
+				) {
+					ram[0xD011] = 0;
+
+				} else {
+				}
+			} else {
+				ram[keyboardAddr] = pressedKey;
+			}
+		}
+
+		totalOperations++;
+
+		if (!noSpeedLimit) {
 			/* Sync to 1 Mhz. */
 			do {
 
 				clock_gettime(CLOCK_REALTIME, &syncTime);
 
-				if (syncTime.tv_nsec > runTime.tv_nsec) {
-					diff = syncTime.tv_nsec - runTime.tv_nsec;
-				} else {
-					diff = TSPEC_NSEC_MAX - (runTime.tv_nsec - syncTime.tv_nsec);
-				}
-
-				diff += (syncTime.tv_sec - runTime.tv_sec) * (TSPEC_NSEC_MAX + 1);
-
-			} while (diff < ((slowDown ? slowDown * 1000 : retVal) * TICK_NS));
+			} while (!timePassed(&runTime, &syncTime, (slowDown ? slowDown * (fasterSlowDown ? 1 : 1000) : retVal) * TICK_NS));
 		}
-
-		/* Sync screen refreshing to 50 hz. */
-		if (runTime.tv_nsec > refreshTime.tv_nsec) {
-			diff = runTime.tv_nsec - refreshTime.tv_nsec;
-		} else {
-			diff = TSPEC_NSEC_MAX - (refreshTime.tv_nsec - runTime.tv_nsec);
-		}
-
-		if (diff > REFRESH_RATE_NS) {
-
-			refreshTime = runTime;
-			DRAW_TERM(screenRefresh());
-		}
-
-		/* Read keyboard every 10 ms. */
-		if (runTime.tv_nsec > kbScanTime.tv_nsec) {
-			diff = runTime.tv_nsec - kbScanTime.tv_nsec;
-		} else {
-			diff = TSPEC_NSEC_MAX - (kbScanTime.tv_nsec - runTime.tv_nsec);
-		}
-
-		if (diff > KB_SCAN_RATE_NS) {
-
-			kbScanTime = runTime;
-			DRAW_TERM(ram[keyboardAddr] = readKeyboard());
-		}
-
-		totalOperations++;
-
-		//getc(stdin);
 	}
 	clock_gettime(CLOCK_REALTIME, &endTime);
 
-	DRAW_TERM(system("/bin/stty cooked"));
+	logTrace();
 
-	printf("%s\033[32;1H%s", CURSOR_RESET, TERM_RESET);
 
 	programEnd(selected_program, memory, &processor);
 
@@ -245,7 +322,7 @@ int main(int argc, char * argv[]) {
 	}
 
 	printf(
-		"Operations performed: %d\n\n Start time: %ds %dms %dns\n   End time: %ds %dms %dns\n\n Difference: %ds %dms %dns\n\nCycle count: %llu\n\n",
+		"Operations performed: %lu\n\n Start time: %ds %ldms %ldns\n   End time: %lds %ldms %ldns\n\n Difference: %lds %ldms %ldns\n\nCycle count: %llu\n\n",
 		totalOperations,
 		0,
 		NS_TO_MS(startTime.tv_nsec),
@@ -256,7 +333,7 @@ int main(int argc, char * argv[]) {
 		secsPassed,
 		NS_TO_MS(nsecsPassed),
 		nsecsPassed - MS_TO_NS(NS_TO_MS(nsecsPassed)),
-		processor.cycleCount
+		processor.cycles.totalCycles
 	);
 }
 
@@ -307,6 +384,11 @@ void loadFile(U8 * pMemory, U16 offset, const char * pPath, mos6502_fileType fil
 * Returns: Byte read from the memory.
 *******************************************************************************/
 U8 fnMemRead(mos6502_addr address) {
+	//printf("MEM READ: $%04X: $%02X\r\n", address, ram[address]);
+	if (*g_selectedProgram == PRG_WOZMON && address == 0xD010) {
+		ram[0xD011] = 0;
+	}
+
 	return ram[address];
 }
 
@@ -333,13 +415,18 @@ void fnMemWrite(mos6502_addr address, U8 value) {
 *
 * Returns: Byte representing the key pressed on the keyboard.
 *******************************************************************************/
-U8 readKeyboard() {
+U8 readKeyboard(void) {
 	U8 key;
-	printf("\033[1;%dH%s", SCREEN_W + 2, COLOR_BLK_BLK);
-	
+
 	key = fgetc(stdin);
 
-	//printf("\033[1D \033[1D%s", COLOR_GRY_BLK);
+	if (key != 0xFF) {
+		if (key == '\r' || key == 0x7F) {
+			printf("\b \b");
+		}
+		printf("\b \b");
+	}
+
 	return key;
 }
 
@@ -351,8 +438,11 @@ U8 readKeyboard() {
 *
 * Returns: Nothing.
 *******************************************************************************/
-void screenClear() {
+void screenClear(void) {
 	system("clear");
+
+	if (*g_selectedProgram == PRG_WOZMON) return;
+
 	printf("%s%s", CURSOR_OFF, COLOR_GRY_BLK);
 
 	for (int memIndex = screenMemAddr + screenMemSize; memIndex >= screenMemAddr; memIndex--) {
@@ -364,25 +454,61 @@ void screenClear() {
 * Refreshes screen from the screen memory.
 *
 * Arguments:
+*	frequency - Calculated real frequency of the processor.
+*
+* Returns: Nothing.
+*******************************************************************************/
+void screenRefresh(unsigned int frequency) {
+
+	static int secondCounter = 50;
+
+	U8 * screenMem = &ram[screenMemAddr];
+
+	/* Buffer for the whole screen, including \r\n at the end. */
+	U8 screenBuf[SCREEN_W * SCREEN_H + SCREEN_H * 2 - 1] = {' '};
+
+	for (int lineIndex = 0; lineIndex < SCREEN_H; lineIndex++) {
+		memcpy((screenBuf + lineIndex * (SCREEN_W + 2)), (screenMem + lineIndex * SCREEN_W), SCREEN_W);
+		screenBuf[lineIndex * (SCREEN_W + 2) - 2] = '\r';
+		screenBuf[lineIndex * (SCREEN_W + 2) - 1] = '\n';
+	}
+	screenBuf[sizeof(screenBuf) - 1] = '\0';
+
+	printf("%s\033[1;1H%s%s", COLOR_GRY_BLK, screenBuf, COLOR_BLK_BLK);
+
+	if (secondCounter++ >= 50) {
+		printf("%s\033[%d;1H%10u hz%s", COLOR_GRY_BLK, SCREEN_H + 1, frequency, COLOR_BLK_BLK);
+		secondCounter = 0;
+	}
+	printf("\033[%d;1H", SCREEN_H + 2);
+}
+
+/*******************************************************************************
+* Handles terminal style output.
+*
+* Arguments:
 *	none
 *
 * Returns: Nothing.
 *******************************************************************************/
-void screenRefresh() {
+void terminalOutput(void) {
 
-	U8 * screenMem = &ram[screenMemAddr];
-	U8 screenLine[SCREEN_W + 1];
+	if (ram[0xD012] != 0) {
+		if (ram[0xD012] & 0x80) {
+			U8 chr = ram[0xD012] & ~0x80;
 
-	screenLine[SCREEN_W] = '\0';
+			lineBuf[lineBufIndex++] = chr;
 
-	printf("\033[1;1H%s", COLOR_GRY_BLK);
+			if (chr == '\r') {
+				lineBuf[lineBufIndex - 1] = '\0';
+				fprintf(tmpLog, "OUTPUT: %s\r\n", lineBuf);
+				lineBufIndex = 0;
+			}
 
-	for (int rowIndex = 0; rowIndex < SCREEN_H; rowIndex++) {
-		for (int colIndex = 0; colIndex < SCREEN_W; colIndex++) {
-			screenLine[colIndex] = *(screenMem++);
+			printf("%c%s", chr, chr == '\r' ? "\n" : "");
 		}
-		printf("%s\033[%d;1H%s%s", COLOR_GRY_BLK, rowIndex + 1, screenLine, COLOR_BLK_BLK);
 	}
+	ram[0xD012] = 0;
 }
 
 /*******************************************************************************
@@ -414,6 +540,10 @@ void programSelector(int selected_program, U8 * pMemory) {
 		loadFile(pMemory, 0xFE00, "./prg/bin/print.6502", mos6502_BIN);
 	} else if (selected_program == PRG_WOZMON) {
 		loadFile(pMemory, 0xFF00, "./prg/bin/wozmon.6502", mos6502_BIN);
+		screenMemAddr = 0xD012;
+		keyboardAddr = 0xD010;
+	} else if (selected_program == PRG_OPCODETEST) {
+		loadFile(pMemory, 0x0000, "./prg/test/6502_functional_test.bin", mos6502_BIN);
 	}
 }
 
@@ -447,4 +577,80 @@ void programEnd(int selected_program, U8 * pMemory, mos6502_processor_st * pProc
 		printf("String entered: %s\n\n", &pMemory[screenMemAddr]);
 	}
 
+}
+
+/*******************************************************************************
+* Checks if given amount of time has been passed between two timespecs.
+*
+* Arguments:
+*	pOldTime		- Starting time of the comparison.
+*	pNewTime		- Test time.
+*	timeToPass		- Amount of nano seconds to pass.
+*
+* Returns: 1 if passed, otherwise 0.
+*******************************************************************************/
+U8 timePassed(struct timespec * pOldTime, struct timespec * pNewTime, time_t timeToPass) {
+
+	U8 passed = 0;
+	time_t diff;
+
+	/* Calculate elapsed ns. */
+	if (pOldTime->tv_nsec > pNewTime->tv_nsec) {
+		diff = TSPEC_NSEC_MAX - (pOldTime->tv_nsec - pNewTime->tv_nsec);
+	} else {
+		diff = pNewTime->tv_nsec - pOldTime->tv_nsec;
+	}
+
+	/* Add elapsed seconds to the diff. */
+	diff += (pNewTime->tv_sec - pOldTime->tv_sec) * (TSPEC_NSEC_MAX + 1);
+
+	if (diff > timeToPass) {
+		passed = 1;
+	}
+
+	return passed;
+}
+
+
+U8 appleKeyConv(U8 input) {
+
+	if (input >= 'a' && input <= 'z') {
+		input -= 0x20;
+	} else if (input == 0x7F) {
+		input = '_';
+	} else if ((input >= 'A' && input <= 'Z') || (input >= ' ' && input <= '@') || input == '^' || input == '\r') {
+		// Capital letters, numbers, return and some special characters are passed through
+	} else {
+		input = 0xFF;
+	}
+
+	return input;
+}
+
+
+void logTrace(void) {
+	U8 tempIndex;
+	
+	for (tempIndex = 0; tempIndex < 80; tempIndex++) {
+		if (traceBuf[tempIndex] != NULL) break;
+	}
+
+	if (tempIndex < 80) {
+		for (tempIndex = 0; tempIndex < 80; tempIndex++) {
+			if (traceBuf[tempIndex] == NULL) break;
+		}
+
+		if (tempIndex != 80) {
+			for (tempIndex = 0; tempIndex < traceBufIndex; tempIndex++) {
+				fprintf(tmpLog, "%s", traceBuf[tempIndex]);
+			}
+		} else {
+			for (tempIndex = traceBufIndex; tempIndex < 80; tempIndex++) {
+				fprintf(tmpLog, "%s", traceBuf[tempIndex]);
+			}
+			for (tempIndex = 0; tempIndex < traceBufIndex; tempIndex++) {
+				fprintf(tmpLog, "%s", traceBuf[tempIndex]);
+			}
+		}
+	}
 }
