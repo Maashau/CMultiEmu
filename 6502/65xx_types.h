@@ -1,38 +1,58 @@
 /*******************************************************************************
-* MOS 6502 emulator type definitions.
+* MOS 65xx emulator type definitions.
 *******************************************************************************/
-#ifndef FILE_6502_TYPES_H
-#define FILE_6502_TYPES_H
+#ifndef FILE_65xx_TYPES_H
+#define FILE_65xx_TYPES_H
 typedef unsigned char U8;
 typedef signed char I8;
 typedef unsigned short U16;
 typedef unsigned long long U64;
 
-typedef U16 mos6502_addr;
+typedef U16 mos65xx_addr;
 
 typedef struct {
-	mos6502_addr PC;
+	mos65xx_addr PC;
 	U8 AC;
 	U8 X;
 	U8 Y;
 	U8 SR;
 	U8 SP;
-} mos6502_reg_st;
-
-typedef U8				(*mos6502_memRead)(mos6502_addr address);
-typedef void			(*mos6502_memWrite)(mos6502_addr address, U8 value);
+} mos65xx_reg_st;
 
 typedef struct {
 	U64	totalCycles;
-	U8	currentOpCycles;
+	U8	currentOp;
 } processor_cycles_st;
 
+typedef struct Processor_65xx_st Processor_65xx;
+
+typedef U8				(*mos65xx_memRead)(Processor_65xx * pProcessor, mos65xx_addr address);
+typedef void			(*mos65xx_memWrite)(Processor_65xx * pProcessor, mos65xx_addr address, U8 value);
+
 typedef struct {
-	mos6502_reg_st		reg;
-	mos6502_memRead		fnMemRead;
-	mos6502_memWrite	fnMemWrite;
+	U8 * ROM;
+	U8 * RAM;
+	U8 * IO;
+} Memory_areas;
+
+typedef struct Processor_65xx_st {
+	mos65xx_reg_st		reg;
+	mos65xx_memRead		fnMemRead;
+	mos65xx_memWrite	fnMemWrite;
 	processor_cycles_st	cycles;
-} mos6502_processor_st;
+	size_t				totOperations;
+	Memory_areas		memAreas;
+	void *				pUtil;
+	U8					lastOp;
+	U8					interrupt;
+	U8					debugLevel;
+} Processor_65xx;
+
+typedef enum {
+	mos65xx_BIN,
+	mos65xx_HEX,
+	mos65xx_ASM
+} mos65xx_fileType;
 
 enum {
 	SR_FLAG_C		= (1 << 0),
@@ -60,21 +80,21 @@ typedef enum {
 	IND = 11,	// indirect
 	INX = 12,	// indexedIndirect
 	INY = 13 	// indirectIndexed
-} mos6502_addrm;
+} mos65xx_addrm;
 
 typedef enum {
 	vector_NMI		= 0xFFFA,
 	vector_RESET	= 0xFFFC,
 	vector_IRQBRK	= 0xFFFE
-} mos6502_vector;
+} mos65xx_vector;
 
-typedef void (*opFn)(mos6502_processor_st * processor, U8 opCodeIndex, mos6502_addrm addrm);
-typedef mos6502_addr (*addrmFn)(mos6502_processor_st * processor);
+typedef void (*opFn)(Processor_65xx * processor, U8 opCodeIndex, mos65xx_addrm addrm);
+typedef mos65xx_addr (*addrmFn)(Processor_65xx * processor);
 
 typedef struct {
 	opFn handler;
 	char * mnemonic;
-	mos6502_addrm addrm;
+	mos65xx_addrm addrm;
 	U8 bytes;
 } opCode_st;
 

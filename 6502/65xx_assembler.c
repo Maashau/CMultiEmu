@@ -1,12 +1,12 @@
 /*******************************************************************************
 * assembler.c
 *
-* 6502 assembler.
+* 65xx assembler.
 *******************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "6502_types.h"
+#include "65xx_types.h"
 
 U8 fileGetLine(FILE * file, char * dstString);
 U8 rowExploder(char * pRow, char *** pDstElements);
@@ -15,12 +15,12 @@ char * skipElement(char * pStr);
 void handleElements(char ** ppElementList, U8 elementCount);
 U8 checkLabel(char * pElement);
 
-extern opCode_st * mos6502_opCodes;
+extern opCode_st * mos65xx_opCodes;
 
 /*******************************************************************************
 * Assembles given file in to the memory.
 *******************************************************************************/
-void mos6502_assemble(char * asmFilePath, U8 * memory) {
+void mos65xx_assemble(char * asmFilePath, U8 * memory) {
 
 	FILE * asmFile = fopen(asmFilePath, "r");
 	char * nextLine = calloc(257, sizeof(U8));

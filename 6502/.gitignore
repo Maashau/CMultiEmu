@@ -1,10 +1,10 @@
 a.out
 .vscode/
-lib/
-obj/
+**/lib/
+**/obj/
 test_6502.out
-prg/lst
-prg/bin
-prg/map
-prg/apple_i/bin
+**/lst
+**/bin
+**/map
 tempLog.txt
+endScreen.txt

@@ -3,36 +3,46 @@
 #include <string.h>
 #include <time.h>
 #include <ctype.h>
-#include "6502.h"
 // Non-blocking fgetc()
 #include <fcntl.h>
 
-#define US_TO_NS(_usecs)	(_usecs * 1000)
-#define MS_TO_NS(_msecs)	(US_TO_NS(_msecs) * 1000)
-#define S_TO_NS(_msecs)		(MS_TO_NS(_msecs) * 1000)
 
-#define NS_TO_US(_nsecs)	(_nsecs / 1000)
-#define NS_TO_MS(_nsecs)	(NS_TO_US(_nsecs) / 1000)
+#include "65xx.h"
+
+
+#include "apple_i/apple_i.h"
+#include "c64/c64.h"
+
+
+#define usToNs(_usecs)	(_usecs * 1000)
+#define msToNs(_msecs)	(usToNs(_msecs) * 1000)
+#define sToNs(_msecs)		(msToNs(_msecs) * 1000)
+
+#define nsToUs(_nsecs)	(_nsecs / 1000)
+#define nsToMs(_nsecs)	(nsToUs(_nsecs) / 1000)
 
 #define CLOCK_FREQ 1000000
 #define SCREEN_W 60
 #define SCREEN_H 25
-#define REFRESH_RATE_NS MS_TO_NS(20)
-#define KB_SCAN_RATE_NS	MS_TO_NS(10)
-#define TICK_NS (time_t)((double)1 / (double)CLOCK_FREQ * (double)S_TO_NS(1))
+#define REFRESH_RATE_NS msToNs(20)
+#define KB_SCAN_RATE_NS	msToNs(10)
+#define TICK_NS (time_t)((double)1 / (double)CLOCK_FREQ * (double)sToNs(1))
 
 #define TSPEC_NSEC_MAX 999999999
 
-#define DRAW_TERM(_x) if (!(debugLogging & 1)) _x
+#define DRAW_TERM(_x) if (!(pCliArguments->debugLogging & 1)) _x
 
 #define TERM_RESET		"\033[m"
 #define COLOR_BLK_BLK	"\033[30;40m"
 #define COLOR_GRY_BLK	"\033[30;47m"
 #define CURSOR_OFF		"\033[?25l"
 #define CURSOR_RESET	"\033[?25h"
+#define BACKSPACE		"\033[D \033[D"
 
+#define term_conf()	fcntl(0, F_SETFL, O_NONBLOCK); system("/bin/stty raw")
+#define term_deConf() system("/bin/stty cooked"); printf("%s%s", CURSOR_RESET, TERM_RESET)
 
-enum {
+typedef enum {
 	PRG_ASSEMBLE,
 	PRG_STORE_TO_MEM,
 	PRG_CLEAR_MEM,
@@ -42,67 +52,48 @@ enum {
 	PRG_NUMQUERY,
 	PRG_PRINT,
 	PRG_APPLE_I,
-	PRG_OPCODETEST
-} programList;
-
-typedef enum {
-	mos6502_BIN,
-	mos6502_HEX,
-	mos6502_ASM
-} mos6502_fileType;
+	PRG_C64,
+	PRG_OPCODETEST,
+	PRG_NONE
+} SelectedProgram;
 
 typedef struct {
-	mos6502_addr startAddr;
-	mos6502_addr endAddr;
-} address_range;
+	SelectedProgram	selectedProgram;
+	U8				debugLogging;
+	time_t			slowDown;
+	U8				fasterSlowDown;
+	U8				noSpeedLimit;
+	U8				logIO;
+} Parameters;
 
-mos6502_addr keyboardAddr = 0xFDFF;
-mos6502_addr screenMemAddr = 0xF800;
-mos6502_addr screenMemSize = SCREEN_W * SCREEN_H;
+mos65xx_addr keyboardAddr = 0xFDFF;
+mos65xx_addr screenMemAddr = 0xF800;
+mos65xx_addr screenMemSize = SCREEN_W * SCREEN_H;
 
-void loadFile(U8 * pMemory, mos6502_addr offset, const char * pPath, mos6502_fileType fileType);
+Parameters * handleCLIArguments(int argc, char * argv[]);
+void printHelp(void);
 
-U8 fnMemRead(mos6502_addr address);
-void fnMemWrite(mos6502_addr address, U8 value);
+U8 fnMemRead(Processor_65xx * pProcessor, mos65xx_addr address);
+void fnMemWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value);
 
 U8 readKeyboard(void);
 
-void screenClear(void);
-void screenRefresh(unsigned int freq);
-void terminalOutput(void);
+void screenClear(Processor_65xx * pProcessor);
+void screenRefresh(U8 * pMemory, unsigned int freq);
 
-void programSelector(int selected_program, U8 * pMemory);
-void programEnd(int selected_program, U8 * pMemory, mos6502_processor_st * pProcessor);
-void addROMArea(mos6502_addr startAddr, mos6502_addr endAddr);
-U8 isROMAddress(mos6502_addr address);
-void addRAMArea(mos6502_addr startAddr, mos6502_addr endAddr);
-U8 isRAMAddress(mos6502_addr address);
+void programSelector(Processor_65xx * pProcessor, Parameters * parameters, U8 * pMemory);
+void programEnd(int selected_program, U8 * pMemory, Processor_65xx * pProcessor);
 
 U8 timePassed(struct timespec * oldTime, struct timespec * newTime, time_t timeToPass);
 
-U8 appleKeyConv(U8 input);
-U8 appleScreenConv(U8 input);
-
-void logTrace(void);
-
-U8 * ram;
+U8 memory[MOS65xx_MEMSIZE];
 
 char lineBuf[512];
 int lineBufIndex = 0;
 char inBuff[20];
 int inBuffIndex = 0;
 
-int * g_selectedProgram;
-
-U8 ROMAddrRangeCount;
-address_range ROMAddrList[0xFF];
-U8 RAMAddrRangeCount;
-address_range RAMAddrList[0xFF];
-
-extern opCode_st * mos6502__opCodes;
-
-extern char * traceBuf[80];
-extern U8 traceBufIndex;
+extern opCode_st * mos65xx__opCodes;
 
 extern FILE * tmpLog;
 
@@ -113,230 +104,113 @@ extern FILE * tmpLog;
 *******************************************************************************/
 int main(int argc, char * argv[]) {
 
-	int selected_program;
-	U8 memory[MOS6502_MEMSIZE];
-	U8 debugLogging = 0;
-	time_t slowDown = 0;
-	U8 fasterSlowDown = 0;
-	U8 noSpeedLimit = 0;
-
-	g_selectedProgram = &selected_program;
-
-	if (
-		argc >= 2
-	&&	*argv[1] >= '0' && *argv[1] <= '9'
-	) {
-		selected_program = *argv[1] - '0';
-		if (argv[1][1] != '\0') {
-			selected_program *= 10;
-			selected_program +=	argv[1][1] - '0';
-		}
-
-		if (argc > 2) {
-			for (int currArg = 2; currArg < argc; currArg++) {
-
-				if (argv[currArg][1] == 'd') {
-					debugLogging = 1;
-				} else if (argv[currArg][1] == 's') {
-
-					debugLogging |= 2;
-
-					fasterSlowDown = argv[currArg][2] == 'f' ? 1 : 0;
-					noSpeedLimit = argv[currArg][2] == 'n' ? 1 : 0;
-
-					if (currArg + 1 == argc
-					||	argv[currArg + 1][0] == '-'
-					) {
-						slowDown = 500;
-					} else {
-						currArg++;
-
-						for (int strIdx = 0; argv[currArg][strIdx] != 0; strIdx++) {
-							if (!isdigit(argv[currArg][strIdx])) {
-								printf("\n\nInvalid argument: %s %s\n\n", argv[currArg - 1], argv[currArg]);
-								exit(0);
-							}
-							slowDown *= 10;
-							slowDown += argv[currArg][strIdx] - '0';
-						}
-					}
-				} else {
-					printf("\n\nInvalid argument: %s\n\n", argv[currArg]);
-					exit(0);
-				}
-
-			}
-		}
-
-	} else {
-
-		printf("Invalid program index given as parameter\n\n");
-		printf("Valid program indexes:\n");
-		printf("\t%d - Store to memory\n", PRG_STORE_TO_MEM);
-		printf("\t%d - Clear memory region\n", PRG_CLEAR_MEM);
-		printf("\t%d - Calculate weekday (1-7) from date\n", PRG_WEEKDAY);
-		printf("\t%d - Run the assembler\n", PRG_ASSEMBLE);
-		printf("\t%d - Keyboard test, prints out 5 characters entered\n", PRG_KEYBOARD);
-		printf("\t%d - Cursor blink\n", PRG_BLINK);
-		printf("\t%d - Number query\n", PRG_NUMQUERY);
-		printf("\t%d - String print test\n", PRG_PRINT);
-		printf("\t%d - Apple I emulator\n", PRG_APPLE_I);
-		printf("\t%d - Opcode test\n", PRG_OPCODETEST);
-		printf("\n\n");
-		printf("Options:\n\t-d : Print operations.\n\t-s(f/n) : Slow down 1-1000 ms/op (def 500)\n\t          f: 1-1000 us/op\n\t          n: no limit\n\n");
-		exit(1);
-
-	}
-
-	ram = memory;
-
-	DRAW_TERM(screenClear());
-
+	Processor_65xx processor;
 	struct timespec startTime, endTime;
-	unsigned long totalOperations = 0;
 	time_t realizedSpeed;
-	U8 retVal = 0;
-
-	mos6502_processor_st processor;
 
 	struct timespec runTime, syncTime, refreshTime = {0}, kbScanTime = {0};
 
-	programSelector(selected_program, memory);
+	Parameters * pCliArguments = handleCLIArguments(argc, argv);
 
-	mos6502_init(&processor, fnMemRead, fnMemWrite, debugLogging);
-
-	if (selected_program == PRG_OPCODETEST) {
-		processor.reg.PC = 0x400;
-	}
-
-	fcntl(0, F_SETFL, O_NONBLOCK);
-	system("/bin/stty raw");
+	programSelector(&processor, pCliArguments, memory);
 
 	clock_gettime(CLOCK_REALTIME, &startTime);
-	
-	while (retVal != 0xFF) {
 
-		time_t diff = 0;
-		unsigned int frequency = 0;
-		mos6502_addr oldPC = processor.reg.PC;
+	if (pCliArguments->selectedProgram == PRG_APPLE_I) {
+		apple_i_run(&processor);
+	} else if (pCliArguments->selectedProgram == PRG_C64) {
+		c64_run(&processor);
+	} else {
+		term_conf();
 
-		clock_gettime(CLOCK_REALTIME, &runTime);
+		while (1) {
 
-		if (processor.cycles.currentOpCycles != 0) {
-			/* Calculate elapsed ns. */
-			if (realizedSpeed > runTime.tv_nsec) {
-				diff = TSPEC_NSEC_MAX - (realizedSpeed - runTime.tv_nsec);
-			} else {
-				diff = runTime.tv_nsec - realizedSpeed;
-			}
+			time_t diff = 0;
+			unsigned int frequency = 0;
+			mos65xx_addr oldPC = processor.reg.PC;
 
-			frequency = (unsigned int)((double)diff / (double)retVal * (double)CLOCK_FREQ) / 1000;
-		}
+			clock_gettime(CLOCK_REALTIME, &runTime);
 
-		realizedSpeed = runTime.tv_nsec;
-
-		mos6502_handleOp(&processor);
-
-		if (processor.reg.PC == oldPC) {
-			
-			DRAW_TERM(screenRefresh(frequency));
-
-			system("/bin/stty cooked");
-			printf("%s%s", CURSOR_RESET, TERM_RESET);
-			printf("\033[m\n\n0x%04X: Infinite loop detected!\n\n", oldPC);
-			break;
-		} 
-
-		/* Sync screen refreshing to 50 hz. */
-		if (timePassed(&refreshTime, &runTime, REFRESH_RATE_NS)) {
-			refreshTime = runTime;
-			
-			if (selected_program == PRG_APPLE_I) {
-				DRAW_TERM(terminalOutput());
-			} else {
-				DRAW_TERM(screenRefresh(frequency));
-			}
-		}
-
-		/* Read keyboard every 10 ms. */
-		if (timePassed(&kbScanTime, &runTime, KB_SCAN_RATE_NS)) {
-			U8 pressedKey = 0;
-			kbScanTime = runTime;
-
-			pressedKey = readKeyboard();
-			if (pressedKey == 0x1B) { // ESC detected.
-				printf("\b \b");
-				pressedKey = readKeyboard();
-
-				if (pressedKey == 0xFF || pressedKey == 0x1B) {  // ESC key pressed, quit.
-					system("/bin/stty cooked");
-					printf("%s%s", CURSOR_RESET, TERM_RESET);
-
-					printf("ESC key hit.\n");
-
-					logTrace();
-					exit(0);
-				} else if (pressedKey == '[') { // CTRL character detected.
-					printf("\b \b");
-					pressedKey = readKeyboard();
-					printf("\b \b");
-					pressedKey = readKeyboard();
-					printf("\b \b");
-				} else { // Unknown ESC sequence.
-					printf("\b \b");
-				}
-			} else if (pressedKey == 0x09) { // TAB pressed (reset).
-				mos6502_init(&processor, fnMemRead, fnMemWrite, debugLogging);
-				printf("\b \b\b \b\b \b\b \b\b \b\b \b\b \b");
-			}
-			
-			if (selected_program == PRG_APPLE_I) {
-
-				pressedKey = appleKeyConv(pressedKey);
-
-				if (pressedKey != 0xFF
-				&&	!(fnMemRead(0xD011) & 0x80)
-				) {
-
-					inBuff[inBuffIndex++] = pressedKey;
-					if (pressedKey == '\r') {
-						inBuff[inBuffIndex - 1] = '\0';
-						fprintf(tmpLog, "INPUT: %s\r\n", inBuff);
-						inBuffIndex = 0;
-					}
-					fnMemWrite(0xD011, 0x80);
-					fnMemWrite(0xD010, pressedKey + 0x80);
-
-				} else if (
-					pressedKey == 0xFF
-				&&	fnMemRead(0xD011) & 0x80
-				) {
-					fnMemWrite(0xD011, 0);
-
+			if (processor.cycles.currentOp != 0) {
+				/* Calculate elapsed ns. */
+				if (realizedSpeed > runTime.tv_nsec) {
+					diff = TSPEC_NSEC_MAX - (realizedSpeed - runTime.tv_nsec);
 				} else {
+					diff = runTime.tv_nsec - realizedSpeed;
 				}
-			} else {
-				fnMemWrite(keyboardAddr, pressedKey);
+
+				frequency = (unsigned int)((double)diff / (double)processor.cycles.currentOp * (double)CLOCK_FREQ) / 1000;
 			}
-		}
 
-		totalOperations++;
+			realizedSpeed = runTime.tv_nsec;
 
-		if (!noSpeedLimit) {
-			/* Sync to 1 Mhz. */
-			do {
+			mos65xx_handleOp(&processor);
 
-				clock_gettime(CLOCK_REALTIME, &syncTime);
+			if (processor.reg.PC == oldPC) {
 
-			} while (!timePassed(&runTime, &syncTime, (slowDown ? slowDown * (fasterSlowDown ? 1 : 1000) : retVal) * TICK_NS));
+				DRAW_TERM(screenRefresh(memory, frequency));
+
+				term_deConf();
+				printf("\033[m\n\n0x%04X: Infinite loop detected!\n\n", oldPC);
+				break;
+			}
+
+
+			if (timePassed(&refreshTime, &runTime, REFRESH_RATE_NS)) {
+				/* Sync screen refreshing to 50 hz. */
+				refreshTime = runTime;
+				DRAW_TERM(screenRefresh(memory, frequency));
+			}
+
+			/* Read keyboard every 10 ms. */
+			if (timePassed(&kbScanTime, &runTime, KB_SCAN_RATE_NS)) {
+				U8 pressedKey = 0;
+				kbScanTime = runTime;
+
+				pressedKey = readKeyboard();
+				if (pressedKey == 0x1B) { // ESC detected.
+					printf(BACKSPACE);
+					pressedKey = readKeyboard();
+
+					if (pressedKey == 0xFF || pressedKey == 0x1B) {  // ESC key pressed, quit.
+
+						term_deConf();
+
+						printf("ESC key hit.\n");
+						break;
+					} else if (pressedKey == '[') { // CTRL character detected.
+						printf(BACKSPACE); // TODO Doesn't erase ABCD from arrow keys
+					} else { // Unknown ESC sequence.
+						printf(BACKSPACE);
+					}
+				} else if (pressedKey == 0x09) { // TAB pressed (reset).
+					Memory_areas memAreas;
+					memAreas.RAM = memory;
+					memAreas.ROM = NULL;
+					memAreas.IO = NULL;
+					mos65xx_init(&processor, &memAreas, fnMemRead, fnMemWrite, pCliArguments->debugLogging, pCliArguments);
+					DRAW_TERM(screenClear(&processor));
+				}
+
+				fnMemWrite(&processor, keyboardAddr, pressedKey);
+
+			}
+
+			processor.totOperations++;
+
+			if (!pCliArguments->noSpeedLimit) {
+				/* Sync to 1 Mhz. */
+				do {
+
+					clock_gettime(CLOCK_REALTIME, &syncTime);
+
+				} while (!timePassed(&runTime, &syncTime, (pCliArguments->slowDown ? pCliArguments->slowDown * (pCliArguments->fasterSlowDown ? 1 : 1000) : processor.cycles.currentOp) * TICK_NS));
+			}
 		}
 	}
 	clock_gettime(CLOCK_REALTIME, &endTime);
 
-	logTrace();
-
-
-	programEnd(selected_program, memory, &processor);
+	programEnd(pCliArguments->selectedProgram, memory, &processor);
 
 	time_t secsPassed, nsecsPassed = 0;
 
@@ -354,56 +228,18 @@ int main(int argc, char * argv[]) {
 
 	printf(
 		"Operations performed: %lu\n\n Start time: %ds %ldms %ldns\n   End time: %lds %ldms %ldns\n\n Difference: %lds %ldms %ldns\n\nCycle count: %llu\n\n",
-		totalOperations,
+		processor.totOperations,
 		0,
-		NS_TO_MS(startTime.tv_nsec),
-		startTime.tv_nsec - MS_TO_NS(NS_TO_MS(startTime.tv_nsec)),
+		nsToMs(startTime.tv_nsec),
+		startTime.tv_nsec - msToNs(nsToMs(startTime.tv_nsec)),
 		endTime.tv_sec - startTime.tv_sec,
-		NS_TO_MS(endTime.tv_nsec),
-		endTime.tv_nsec - MS_TO_NS(NS_TO_MS(endTime.tv_nsec)),
+		nsToMs(endTime.tv_nsec),
+		endTime.tv_nsec - msToNs(nsToMs(endTime.tv_nsec)),
 		secsPassed,
-		NS_TO_MS(nsecsPassed),
-		nsecsPassed - MS_TO_NS(NS_TO_MS(nsecsPassed)),
+		nsToMs(nsecsPassed),
+		nsecsPassed - msToNs(nsToMs(nsecsPassed)),
 		processor.cycles.totalCycles
 	);
-}
-
-/*******************************************************************************
-* Loads binary from given path.
-*
-* Arguments:
-*	pMemory - Pointer to a memory allocation.
-*	pPath	- Pointer to a file path.
-*
-*
-* Returns: Nothing.
-*******************************************************************************/
-void loadFile(U8 * pMemory, U16 offset, const char * pPath, mos6502_fileType fileType) {
-	FILE * fpPrg;
-
-	fpPrg = fopen(pPath, "rb");
-
-	switch (fileType)
-	{
-	case mos6502_BIN:
-		break;
-	case mos6502_HEX:
-	case mos6502_ASM:
-		printf("Filetype not yet supported...\n");
-		exit(1);
-	}
-
-	for (int memIdx = offset; memIdx <= 0xFFFF; memIdx++) {
-		int tempByte = fgetc(fpPrg);
-
-		if (tempByte != EOF) {
-			pMemory[memIdx] = (U8)tempByte;
-		} else {
-			break;
-		}
-	}
-
-	fclose(fpPrg);
 }
 
 /*******************************************************************************
@@ -414,16 +250,16 @@ void loadFile(U8 * pMemory, U16 offset, const char * pPath, mos6502_fileType fil
 *
 * Returns: Byte read from the memory.
 *******************************************************************************/
-U8 fnMemRead(mos6502_addr address) {
-	if (*g_selectedProgram == PRG_APPLE_I && address == 0xD010) {
-		ram[0xD011] = 0;
+U8 fnMemRead(Processor_65xx * pProcessor, mos65xx_addr address) {
+	if (((Parameters *)pProcessor->pUtil)->selectedProgram == PRG_APPLE_I && address == 0xD010) {
+		pProcessor->memAreas.RAM[0xD011] = 0;
 	}
-	
+
 	if (!isROMAddress(address) && !isRAMAddress(address)) {
 		return 0;
 	}
 
-	return ram[address];
+	return pProcessor->memAreas.RAM[address];
 }
 
 /*******************************************************************************
@@ -435,9 +271,9 @@ U8 fnMemRead(mos6502_addr address) {
 *
 * Returns: Nothing.
 *******************************************************************************/
-void fnMemWrite(mos6502_addr address, U8 value) {
+void fnMemWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value) {
 	if (!isROMAddress(address)) {
-		ram[address] = value;
+		pProcessor->memAreas.RAM[address] = value;
 	}
 }
 
@@ -472,15 +308,13 @@ U8 readKeyboard(void) {
 *
 * Returns: Nothing.
 *******************************************************************************/
-void screenClear(void) {
+void screenClear(Processor_65xx * pProcessor) {
 	system("clear");
-
-	if (*g_selectedProgram == PRG_APPLE_I) return;
 
 	printf("%s%s", CURSOR_OFF, COLOR_GRY_BLK);
 
 	for (int memIndex = screenMemAddr + screenMemSize; memIndex >= screenMemAddr; memIndex--) {
-		fnMemWrite(memIndex, ' ');
+		fnMemWrite(pProcessor, memIndex, ' ');
 	}
 }
 
@@ -492,11 +326,11 @@ void screenClear(void) {
 *
 * Returns: Nothing.
 *******************************************************************************/
-void screenRefresh(unsigned int frequency) {
+void screenRefresh(U8 * pMemory, unsigned int frequency) {
 
 	static int secondCounter = 50;
 
-	U8 * screenMem = &ram[screenMemAddr];
+	U8 * screenMem = &pMemory[screenMemAddr];
 
 	/* Buffer for the whole screen, including \r\n at the end. */
 	U8 screenBuf[SCREEN_W * SCREEN_H + SCREEN_H * 2 - 1] = {' '};
@@ -518,39 +352,6 @@ void screenRefresh(unsigned int frequency) {
 }
 
 /*******************************************************************************
-* Handles terminal style output.
-*
-* Arguments:
-*	none
-*
-* Returns: Nothing.
-*******************************************************************************/
-void terminalOutput(void) {
-
-	U8 memChar = fnMemRead(0xD012);
-
-	if (memChar != 0) {
-		if (memChar & 0x80) {
-			U8 chr = appleScreenConv(memChar & ~0x80);
-
-			if (chr != 0xFF) {
-				lineBuf[lineBufIndex++] = chr;
-
-				if (chr == '\r') {
-					lineBuf[lineBufIndex - 1] = '\0';
-					fprintf(tmpLog, "OUTPUT: %s\r\n", lineBuf);
-					lineBufIndex = 0;
-				}
-
-				printf("%c%s", chr, chr == '\r' ? "\n" : "");
-			}
-		}
-	}
-
-	fnMemWrite(0xD012, 0);
-}
-
-/*******************************************************************************
 * Loads selected program to the memory.
 *
 * Arguments:
@@ -558,48 +359,59 @@ void terminalOutput(void) {
 *	pMemory				- Pointer to the memory buffer.
 *
 *******************************************************************************/
-void programSelector(int selected_program, U8 * pMemory) {
+void programSelector(Processor_65xx * pProcessor, Parameters * parameters, U8 * pMemory) {
 
-	if (selected_program == PRG_ASSEMBLE) {
-		mos6502_assemble("./prg/asm/32bitdiv.6502asm", ram);
+	if (parameters->selectedProgram == PRG_ASSEMBLE) {
+		//mos65xx_assemble("./prg/asm/32bitdiv.asm", pMemory);
 		exit(0);
-	} else if (selected_program == PRG_STORE_TO_MEM) { // write values to memory.
-		loadFile(pMemory, 0xFE00, "./prg/bin/memWrite.6502", mos6502_BIN);
+	} else if (parameters->selectedProgram == PRG_STORE_TO_MEM) { // write values to memory.
+		loadFile(pMemory, 0xFE00, "./prg/bin/memWrite.rom", mos65xx_BIN);
 		addRAMArea(0x0000, 0xFFFF); // System & User space
-	} else if (selected_program == PRG_CLEAR_MEM) { // Clears X amount of memory from memory address (100), Y
-		loadFile(pMemory, 0xFE00, "./prg/bin/memClear.6502", mos6502_BIN);
+	} else if (parameters->selectedProgram == PRG_CLEAR_MEM) { // Clears X amount of memory from memory address (100), Y
+		loadFile(pMemory, 0xFE00, "./prg/bin/memClear.rom", mos65xx_BIN);
 		addRAMArea(0x0000, 0xFFFF); // System & User space
-	} else if (selected_program == PRG_WEEKDAY) { // Day of the week. Y = year, X = month, AC = day
-		loadFile(pMemory, 0xFE00, "./prg/bin/weekday.6502", mos6502_BIN);
+	} else if (parameters->selectedProgram == PRG_WEEKDAY) { // Day of the week. Y = year, X = month, AC = day
+		loadFile(pMemory, 0xFE00, "./prg/bin/weekday.rom", mos65xx_BIN);
 		addRAMArea(0x0000, 0xFFFF); // System & User space
-	} else if (selected_program == PRG_KEYBOARD) {
-		loadFile(pMemory, 0xFE00, "./prg/bin/kbTest.6502", mos6502_BIN);
+	} else if (parameters->selectedProgram == PRG_KEYBOARD) {
+		loadFile(pMemory, 0xFE00, "./prg/bin/kbTest.rom", mos65xx_BIN);
 		addRAMArea(0x0000, 0xFFFF); // System & User space
-	} else if (selected_program == PRG_BLINK) {
-		loadFile(pMemory, 0xFE00, "./prg/bin/blink.6502", mos6502_BIN);
+	} else if (parameters->selectedProgram == PRG_BLINK) {
+		loadFile(pMemory, 0xFE00, "./prg/bin/blink.rom", mos65xx_BIN);
 		addRAMArea(0x0000, 0xFFFF); // System & User space
-	} else if (selected_program == PRG_NUMQUERY) {
-		loadFile(pMemory, 0xFE00, "./prg/bin/numQuery.6502", mos6502_BIN);
+	} else if (parameters->selectedProgram == PRG_NUMQUERY) {
+		loadFile(pMemory, 0xFE00, "./prg/bin/numQuery.rom", mos65xx_BIN);
 		addRAMArea(0x0000, 0xFFFF); // System & User space
-	} else if (selected_program == PRG_PRINT) {
-		loadFile(pMemory, 0xFE00, "./prg/bin/print.6502", mos6502_BIN);
+	} else if (parameters->selectedProgram == PRG_PRINT) {
+		loadFile(pMemory, 0xFE00, "./prg/bin/print.rom", mos65xx_BIN);
 		addRAMArea(0x0000, 0xFFFF); // System & User space
-	} else if (selected_program == PRG_APPLE_I) {
-		loadFile(pMemory, 0xE000, "./prg/apple_i/bin/intBasic.6502", mos6502_BIN);
-		loadFile(pMemory, 0xFF00, "./prg/apple_i/bin/wozmon.6502", mos6502_BIN);
-		screenMemAddr = 0xD012;
-		keyboardAddr = 0xD010;
-		addRAMArea(0x0000, 0x7FFF); // System & User space
-		addRAMArea(0xD010, 0xD010); // Keyboard In
-		addRAMArea(0xD011, 0xD011); // Keyboard Control
-		addRAMArea(0xD012, 0xD012); // Display Out
-		addRAMArea(0xD013, 0xD013); // Display Control
-		addROMArea(0xE000, 0xEFFF); // Integer Basic
-		addROMArea(0xFF00, 0xFFFF); // Monitor
-	} else if (selected_program == PRG_OPCODETEST) {
-		loadFile(pMemory, 0x0000, "./prg/test/6502_functional_test.bin", mos6502_BIN);
+	} else if (parameters->selectedProgram == PRG_APPLE_I) {
+		apple_i_init(pProcessor);
+	} else if (parameters->selectedProgram == PRG_C64) {
+		c64_init(pProcessor);
+	} else if (parameters->selectedProgram == PRG_OPCODETEST) {
+		loadFile(pMemory, 0x0000, "./prg/test/6502_functional_test.bin", mos65xx_BIN);
 		addRAMArea(0x0000, 0xFFFF); // System & User space
 	}
+
+	if (parameters->selectedProgram != PRG_APPLE_I
+	&&	parameters->selectedProgram != PRG_C64
+	) {
+		Memory_areas memAreas;
+
+		memAreas.RAM = pMemory;
+		memAreas.ROM = NULL;
+		memAreas.IO = NULL;
+
+		mos65xx_init(pProcessor, &memAreas, fnMemRead, fnMemWrite, parameters->debugLogging, parameters);
+
+		screenClear(pProcessor);
+
+		if (parameters->selectedProgram == PRG_OPCODETEST) {
+			pProcessor->reg.PC = 0x400;
+		}
+	}
+
 }
 
 /*******************************************************************************
@@ -611,7 +423,7 @@ void programSelector(int selected_program, U8 * pMemory) {
 *	pProcessor			- Pointer to the processor struct.
 *
 *******************************************************************************/
-void programEnd(int selected_program, U8 * pMemory, mos6502_processor_st * pProcessor) {
+void programEnd(int selected_program, U8 * pMemory, Processor_65xx * pProcessor) {
 
 	if (selected_program == PRG_WEEKDAY) {
 		printf(
@@ -666,103 +478,110 @@ U8 timePassed(struct timespec * pOldTime, struct timespec * pNewTime, time_t tim
 	return passed;
 }
 
+/*******************************************************************************
+* Handle command line arguments.
+*
+* Arguments:
+*	argc, argv	- Command line arguments
+*
+* Returns: Pointer to a struct with all resolved parameters.
+*******************************************************************************/
+Parameters * handleCLIArguments(int argc, char * argv[]) {
 
-U8 appleKeyConv(U8 input) {
+	Parameters * pCLIArgs = calloc(sizeof(Parameters), 1);
+	char * currArg = argv[1];
 
-	if (input >= 'a' && input <= 'z') {
-		input -= 0x20;
-	} else if (input == 0x7F) {
-		input = '_';
-	} else if ((input >= 'A' && input <= 'Z') || (input >= ' ' && input <= '@') || input == '^' || input == '\r') {
-		// Capital letters, numbers, return and some special characters are passed through
-	} else {
-		input = 0xFF;
+	/* First argument must be program index number */
+	if (argc < 2 ||	currArg[0] < '0' || currArg[0] > '9') {
+		printf(
+			"%s program index %s%s%sgiven as parameter\n\n",
+			argc < 2 ? "No": "Invalid",
+			argc < 2 ? "": "(",
+			argc < 2 ? "" : currArg,
+			argc < 2 ? "": ") "
+		);
+		printHelp();
 	}
 
-	return input;
-}
-
-U8 appleScreenConv(U8 input) {
-
-	if (input == '\r' || (input >= ' ' && input <= '_')) {
-		// Capital letters, numbers, return and some special characters are passed through
-	} else {
-		input = 0xFF;
+	/* Parse selected program index number */
+	pCLIArgs->selectedProgram = currArg[0] - '0';
+	if (currArg[1] >= '0' && currArg[1] <= '9') {
+		pCLIArgs->selectedProgram *= 10;
+		pCLIArgs->selectedProgram += currArg[1] - '0';
+	} else if (currArg[1] != '\0') {
+		printf("Invalid program index (%s) given as parameter\n\n", currArg);
+		printHelp();
 	}
 
-	return input;
-}
-
-
-void logTrace(void) {
-	U8 tempIndex;
-	
-	for (tempIndex = 0; tempIndex < 80; tempIndex++) {
-		if (traceBuf[tempIndex] != NULL) break;
+	if (pCLIArgs->selectedProgram >= PRG_NONE) {
+		printf("Program index (%d) larger than count of programs\n\n", pCLIArgs->selectedProgram);
+		printHelp();
 	}
 
-	if (tempIndex < 80) {
-		for (tempIndex = 0; tempIndex < 80; tempIndex++) {
-			if (traceBuf[tempIndex] == NULL) break;
-		}
+	for (int argIdx = 2; argIdx < argc; argIdx++) {
 
-		if (tempIndex != 80) {
-			for (tempIndex = 0; tempIndex < traceBufIndex; tempIndex++) {
-				fprintf(tmpLog, "%s", traceBuf[tempIndex]);
+		char * currArg = argv[argIdx];
+
+		if (currArg[1] == 'd') {
+			pCLIArgs->debugLogging = 1;
+
+		} else if (currArg[1] == 'l') {
+			pCLIArgs->logIO = 1;
+
+		} else if (currArg[1] == 's') {
+
+			pCLIArgs->debugLogging |= 2;
+
+			pCLIArgs->fasterSlowDown = currArg[2] == 'f' ? 1 : 0;
+			pCLIArgs->noSpeedLimit = currArg[2] == 'n' ? 1 : 0;
+
+			if (argIdx + 1 == argc
+			||	argv[argIdx + 1][0] == '-'
+			) {
+				pCLIArgs->slowDown = 500;
+			} else {
+				argIdx++;
+
+				for (int strIdx = 0; currArg[strIdx] != 0; strIdx++) {
+					if (!isdigit(currArg[strIdx])) {
+						printf("\n\nInvalid argument: %s %s\n\n", argv[argIdx - 1], currArg);
+						printHelp();
+					}
+					pCLIArgs->slowDown *= 10;
+					pCLIArgs->slowDown += currArg[strIdx] - '0';
+				}
 			}
 		} else {
-			for (tempIndex = traceBufIndex; tempIndex < 80; tempIndex++) {
-				fprintf(tmpLog, "%s", traceBuf[tempIndex]);
-			}
-			for (tempIndex = 0; tempIndex < traceBufIndex; tempIndex++) {
-				fprintf(tmpLog, "%s", traceBuf[tempIndex]);
-			}
-		}
-	}
-}
-
-void addROMArea(mos6502_addr startAddr, mos6502_addr endAddr) {
-	if (startAddr > endAddr) {
-		printf("\n\nInvalid ROM area range (0x%04x - 0x%04x)...\n\n", startAddr, endAddr);
-		exit(1);
-	}
-
-	ROMAddrList[ROMAddrRangeCount].startAddr = startAddr;
-	ROMAddrList[ROMAddrRangeCount].endAddr = endAddr;
-
-	ROMAddrRangeCount++;
-}
-U8 isROMAddress(mos6502_addr address) {
-	for (int areaIdx = 0; areaIdx < ROMAddrRangeCount; areaIdx++) {
-		if (ROMAddrList[areaIdx].startAddr <= address
-		&&	ROMAddrList[areaIdx].endAddr >= address
-		) {
-			return 1;
+			printf("\n\nInvalid argument: %s\n\n", currArg);
+			printHelp();
 		}
 	}
 
-	return 0;
+	return pCLIArgs;
 }
 
-void addRAMArea(mos6502_addr startAddr, mos6502_addr endAddr) {
-	if (startAddr > endAddr) {
-		printf("\n\nInvalid RAM area range (0x%04x - 0x%04x)...\n\n", startAddr, endAddr);
-		exit(1);
-	}
-
-	RAMAddrList[RAMAddrRangeCount].startAddr = startAddr;
-	RAMAddrList[RAMAddrRangeCount].endAddr = endAddr;
-
-	RAMAddrRangeCount++;
-}
-U8 isRAMAddress(mos6502_addr address) {
-	for (int areaIdx = 0; areaIdx < RAMAddrRangeCount; areaIdx++) {
-		if (RAMAddrList[areaIdx].startAddr <= address
-		&&	RAMAddrList[areaIdx].endAddr >= address
-		) {
-			return 1;
-		}
-	}
-
-	return 0;
+/*******************************************************************************
+* Prints help text
+*
+* Arguments:
+*	-
+*
+* Returns: None, exits the program
+*******************************************************************************/
+void printHelp(void) {
+	printf("Valid program indexes:\n");
+	printf("\t%d - Store to memory\n", PRG_STORE_TO_MEM);
+	printf("\t%d - Clear memory region\n", PRG_CLEAR_MEM);
+	printf("\t%d - Calculate weekday (1-7) from date\n", PRG_WEEKDAY);
+	printf("\t%d - Run the assembler\n", PRG_ASSEMBLE);
+	printf("\t%d - Keyboard test, prints out 5 characters entered\n", PRG_KEYBOARD);
+	printf("\t%d - Cursor blink\n", PRG_BLINK);
+	printf("\t%d - Number query\n", PRG_NUMQUERY);
+	printf("\t%d - String print test\n", PRG_PRINT);
+	printf("\t%d - Apple I emulator\n", PRG_APPLE_I);
+	printf("\t%d - Commodore 64 emulator\n", PRG_C64);
+	printf("\t%d - Opcode test\n", PRG_OPCODETEST);
+	printf("\n\n");
+	printf("Options:\n\t-d : Print operations.\n\t-s(f/n) : Slow down 1-1000 ms/op (def 500)\n\t          f: 1-1000 us/op\n\t          n: no limit\n\n");
+	exit(1);
 }

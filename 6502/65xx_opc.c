@@ -1,14 +1,14 @@
 /*******************************************************************************
-* 6502_opc.c
+* 65xx_opc.c
 *
-* 6502 instruction implementations.
+* 65xx instruction implementations.
 *******************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "6502.h"
-//#include "6502_opc.h"
-#include "6502_addrm.h"
+#include "65xx.h"
+//#include "65xx_opc.h"
+#include "65xx_addrm.h"
 
 /*******************************************************************************
 * Macros and definitions.
@@ -74,13 +74,13 @@ addrmFn addrm_functions[] = {
 /*******************************************************************************
 * Common private functions
 *******************************************************************************/
-void mos6502_branch(mos6502_processor_st * pProcessor, U8 condition);
-U8 mos6502_binAdd(mos6502_processor_st * pProcessor, U8 lValue, U8 rValue);
-U8 mos6502_decAdd(mos6502_processor_st * pProcessor, U8 lValue, U8 rValue, I8 operator);
-void mos6502_compare(mos6502_processor_st * pProcessor, U8 lValue, U8 rValue);
+void mos65xx_branch(Processor_65xx * pProcessor, U8 condition);
+U8 mos65xx_binAdd(Processor_65xx * pProcessor, U8 lValue, U8 rValue);
+U8 mos65xx_decAdd(Processor_65xx * pProcessor, U8 lValue, U8 rValue, I8 operator);
+void mos65xx_compare(Processor_65xx * pProcessor, U8 lValue, U8 rValue);
 
 
-void mos6502_ILLNOP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm);
+void mos65xx_ILLNOP(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm);
 
 /*******************************************************************************
 * Add Memory to Accumulator with Carry.
@@ -90,8 +90,8 @@ void mos6502_ILLNOP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm 
 * N Z C I D V
 * + + + - - +
 *******************************************************************************/
-void mos6502_ADC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
-	mos6502_addr address;
+void mos65xx_ADC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
+	mos65xx_addr address;
 	U16 oldPC = pProcessor->reg.PC;
 	U8 memValue = 0;
 
@@ -101,28 +101,28 @@ void mos6502_ADC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 		case 0x69: // immediate
 			break;
 		case 0x65: // zeropage
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0x75: // zeropage,X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x6D: // absolute
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x7D: // absolute,X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x79: // absolute,Y
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x61: // (indirect,X)
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0x71: // (indirect),Y
-			pProcessor->cycles.currentOpCycles = 5;
+			pProcessor->cycles.currentOp = 5;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
@@ -130,16 +130,16 @@ void mos6502_ADC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 	memValue = addrm_read8(pProcessor, address);
 
 	if (SR_GET_D()) {	// Decimal mode
-		pProcessor->reg.AC = mos6502_decAdd(pProcessor, pProcessor->reg.AC, memValue, 1); 
+		pProcessor->reg.AC = mos65xx_decAdd(pProcessor, pProcessor->reg.AC, memValue, 1); 
 	} else {			// Binary mode
-		pProcessor->reg.AC = mos6502_binAdd(pProcessor, pProcessor->reg.AC, memValue); 
+		pProcessor->reg.AC = mos65xx_binAdd(pProcessor, pProcessor->reg.AC, memValue); 
 	}
 	
 	switch (opCode)	{
 		case 0x7D:
 		case 0x79:
 		case 0x71:
-			pProcessor->cycles.currentOpCycles += MOS6502_OUTOFPAGE(oldPC, address);
+			pProcessor->cycles.currentOp += MOS65xx_OUTOFPAGE(oldPC, address);
 			break;
 		default:
 			break;
@@ -154,36 +154,36 @@ void mos6502_ADC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_AND(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
-	mos6502_addr address;
-	mos6502_addr oldPC = pProcessor->reg.PC;
+void mos65xx_AND(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
+	mos65xx_addr address;
+	mos65xx_addr oldPC = pProcessor->reg.PC;
 
 	switch (opCode) {
 		case 0x29: //immediate
 			break;
 		case 0x25: //zeropage
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0x35: //zeropage,X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x2D: //absolute
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x3D: //absolute,X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x39: //absolute,Y
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x21: //(indirect,X)
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0x31: //(indirect),Y
-			pProcessor->cycles.currentOpCycles = 5;
+			pProcessor->cycles.currentOp = 5;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
@@ -193,7 +193,7 @@ void mos6502_AND(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 		case 0x3D:
 		case 0x39:
 		case 0x31:
-			pProcessor->cycles.currentOpCycles += MOS6502_OUTOFPAGE(oldPC, address);
+			pProcessor->cycles.currentOp += MOS65xx_OUTOFPAGE(oldPC, address);
 			break;
 		default:
 			break;
@@ -213,29 +213,29 @@ void mos6502_AND(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + + - - -
 *******************************************************************************/
-void mos6502_ASL(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
-	mos6502_addr address;
+void mos65xx_ASL(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
+	mos65xx_addr address;
 	U8 origVal = 0;
 	U8 result = 0;
 
 	switch (opCode) {
 		case 0x0A: // accumulator
-			pProcessor->cycles.currentOpCycles = 2;
+			pProcessor->cycles.currentOp = 2;
 			break;
 		case 0x06: // zeropage
-			pProcessor->cycles.currentOpCycles = 5;
+			pProcessor->cycles.currentOp = 5;
 			break;
 		case 0x16: // zeropage,X
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0x0E: // absolute
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0x1E: // absolute,X
-			pProcessor->cycles.currentOpCycles = 7;
+			pProcessor->cycles.currentOp = 7;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	if (opCode == 0x0A) {
@@ -266,12 +266,12 @@ void mos6502_ASL(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_BCC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_BCC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	mos6502_branch(pProcessor, !SR_GET_C());
+	mos65xx_branch(pProcessor, !SR_GET_C());
 }
 
 /*******************************************************************************
@@ -282,12 +282,12 @@ void mos6502_BCC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_BCS(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_BCS(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	mos6502_branch(pProcessor, SR_GET_C());	
+	mos65xx_branch(pProcessor, SR_GET_C());	
 }
 
 /*******************************************************************************
@@ -298,12 +298,12 @@ void mos6502_BCS(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_BEQ(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_BEQ(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	mos6502_branch(pProcessor, SR_GET_Z());
+	mos65xx_branch(pProcessor, SR_GET_Z());
 }
 
 /*******************************************************************************
@@ -314,20 +314,20 @@ void mos6502_BEQ(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N  Z C I D V
 * M7 + - - - M6
 *******************************************************************************/
-void mos6502_BIT(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_BIT(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	U8 memValue = 0;
-	mos6502_addr address = 0;
+	mos65xx_addr address = 0;
 
 	switch (opCode) {
 		case 0x24: // zeropage
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0x2C: // absolute
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
@@ -346,12 +346,12 @@ void mos6502_BIT(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_BMI(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_BMI(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	mos6502_branch(pProcessor, SR_GET_N());
+	mos65xx_branch(pProcessor, SR_GET_N());
 }
 
 /*******************************************************************************
@@ -359,12 +359,12 @@ void mos6502_BMI(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 * branch on Z = 0
 *******************************************************************************/
-void mos6502_BNE(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_BNE(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	mos6502_branch(pProcessor, !SR_GET_Z());
+	mos65xx_branch(pProcessor, !SR_GET_Z());
 }
 
 /*******************************************************************************
@@ -375,12 +375,12 @@ void mos6502_BNE(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_BPL(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_BPL(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	mos6502_branch(pProcessor, !SR_GET_N());
+	mos65xx_branch(pProcessor, !SR_GET_N());
 }
 
 /*******************************************************************************
@@ -391,12 +391,12 @@ void mos6502_BPL(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - 1 - -
 *******************************************************************************/
-void mos6502_BRK(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_BRK(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 7;
+	pProcessor->cycles.currentOp = 7;
 
 	addrm_stackPush16(pProcessor, pProcessor->reg.PC + 1);
 	addrm_stackPush8(pProcessor, pProcessor->reg.SR | SR_FLAG_B | SR_FLAG_UNUSED);
@@ -414,12 +414,12 @@ void mos6502_BRK(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_BVC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_BVC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	mos6502_branch(pProcessor, !SR_GET_V());
+	mos65xx_branch(pProcessor, !SR_GET_V());
 }
 
 /*******************************************************************************
@@ -430,12 +430,12 @@ void mos6502_BVC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_BVS(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_BVS(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	mos6502_branch(pProcessor, SR_GET_V());
+	mos65xx_branch(pProcessor, SR_GET_V());
 }
 
 /*******************************************************************************
@@ -446,14 +446,14 @@ void mos6502_BVS(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - 0 - - -
 *******************************************************************************/
-void mos6502_CLC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_CLC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
 	SR_RESET_C();
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -464,14 +464,14 @@ void mos6502_CLC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - 0 -
 *******************************************************************************/
-void mos6502_CLD(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_CLD(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
 	SR_RESET_D();
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -482,14 +482,14 @@ void mos6502_CLD(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - 0 - -
 *******************************************************************************/
-void mos6502_CLI(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_CLI(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
 	SR_RESET_I();
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -500,14 +500,14 @@ void mos6502_CLI(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - 0
 *******************************************************************************/
-void mos6502_CLV(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_CLV(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
 	SR_RESET_V();
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -518,9 +518,9 @@ void mos6502_CLV(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + + - - -
 *******************************************************************************/
-void mos6502_CMP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_CMP(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
-	mos6502_addr address = 0;
+	mos65xx_addr address = 0;
 	U16 oldPC = pProcessor->reg.PC;
 	U8 memValue = 0;
 
@@ -528,28 +528,28 @@ void mos6502_CMP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 		case 0xC9: // immediate
 			break;
 		case 0xC5: // zeropage
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0xD5: // zeropage,X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xCD: // absolute
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xDD: // absolute,X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xD9: // absolute,Y
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xC1: // (indirect,X)
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0xD1: // (indirect),Y
-			pProcessor->cycles.currentOpCycles = 5;
+			pProcessor->cycles.currentOp = 5;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
@@ -560,13 +560,13 @@ void mos6502_CMP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 		case 0xDD:
 		case 0xD9:
 		case 0xD1:
-			pProcessor->cycles.currentOpCycles += MOS6502_OUTOFPAGE(oldPC, address);
+			pProcessor->cycles.currentOp += MOS65xx_OUTOFPAGE(oldPC, address);
 			break;
 		default:
 			break;
 	}
 	
-	mos6502_compare(pProcessor, pProcessor->reg.AC, memValue);
+	mos65xx_compare(pProcessor, pProcessor->reg.AC, memValue);
 }
 
 /*******************************************************************************
@@ -577,28 +577,28 @@ void mos6502_CMP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + + - - -
 *******************************************************************************/
-void mos6502_CPX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_CPX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	U8 memValue = 0;
-	mos6502_addr address;
+	mos65xx_addr address;
 
 	switch (opCode) {
 		case 0xE0: // immediate
 			break;
 		case 0xE4: // zeropage
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0xEC: // absolute
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
 	memValue = addrm_read8(pProcessor, address);
 	
-	mos6502_compare(pProcessor, pProcessor->reg.X, memValue);
+	mos65xx_compare(pProcessor, pProcessor->reg.X, memValue);
 }
 
 /*******************************************************************************
@@ -609,28 +609,28 @@ void mos6502_CPX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + + - - -
 *******************************************************************************/
-void mos6502_CPY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_CPY(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	U8 memValue = 0;
-	mos6502_addr address;
+	mos65xx_addr address;
 
 	switch (opCode) {
 		case 0xC0: // immediate
 			break;
 		case 0xC4: // zeropage
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0xCC: // absolute
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
 	memValue = addrm_read8(pProcessor, address);
 	
-	mos6502_compare(pProcessor, pProcessor->reg.Y, memValue);
+	mos65xx_compare(pProcessor, pProcessor->reg.Y, memValue);
 }
 
 /*******************************************************************************
@@ -641,26 +641,26 @@ void mos6502_CPY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_DEC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_DEC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
-	mos6502_addr address;
+	mos65xx_addr address;
 	U8 memValue;
 
 	switch (opCode) {
 		case 0xC6:  //	zeropage
-			pProcessor->cycles.currentOpCycles = 	5;
+			pProcessor->cycles.currentOp = 	5;
 			break;
 		case 0xD6:  //	zeropage,X
-			pProcessor->cycles.currentOpCycles = 	6;
+			pProcessor->cycles.currentOp = 	6;
 			break;
 		case 0xCE:  //	absolute
-			pProcessor->cycles.currentOpCycles = 	6;
+			pProcessor->cycles.currentOp = 	6;
 			break;
 		case 0xDE:  //	absolute,X
-			pProcessor->cycles.currentOpCycles = 	7;
+			pProcessor->cycles.currentOp = 	7;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
@@ -679,7 +679,7 @@ void mos6502_DEC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_DEX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_DEX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
@@ -688,7 +688,7 @@ void mos6502_DEX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 
 	SR_COND_SET_N(CHK_IF_N(pProcessor->reg.X));
 	SR_COND_SET_Z(CHK_IF_Z(pProcessor->reg.X));
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -699,7 +699,7 @@ void mos6502_DEX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_DEY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_DEY(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
@@ -708,7 +708,7 @@ void mos6502_DEY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 
 	SR_COND_SET_N(pProcessor->reg.Y & SR_FLAG_N);
 	SR_COND_SET_Z(pProcessor->reg.Y == 0);
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -719,36 +719,36 @@ void mos6502_DEY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_EOR(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
-	mos6502_addr address;	
+void mos65xx_EOR(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
+	mos65xx_addr address;	
 	U16 oldPC = pProcessor->reg.PC;
 
 	switch (opCode) {
 		case 0x49: // immediate
 			break;
 		case 0x45: // zeropage
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0x55: // zeropage, X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x4D: // absolute
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x5D: // absolute, X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x59: // absolute, Y
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x41: // (indirect, X)
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0x51: // (indirect), Y
-			pProcessor->cycles.currentOpCycles = 5;
+			pProcessor->cycles.currentOp = 5;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
@@ -758,7 +758,7 @@ void mos6502_EOR(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 		case 0x5D:
 		case 0x59:
 		case 0x51:
-			pProcessor->cycles.currentOpCycles += MOS6502_OUTOFPAGE(oldPC, address);
+			pProcessor->cycles.currentOp += MOS65xx_OUTOFPAGE(oldPC, address);
 			break;
 		default:
 			break;
@@ -776,26 +776,26 @@ void mos6502_EOR(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_INC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_INC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
-	mos6502_addr address;
+	mos65xx_addr address;
 	U8 memValue = 0;
 
 	switch (opCode) {
 		case 0xE6:	// zeropage
-			pProcessor->cycles.currentOpCycles = 5;
+			pProcessor->cycles.currentOp = 5;
 			break;
 		case 0xF6:	// zeropage,X
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0xEE:	// absolute
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0xFE:	// absolute,X
-			pProcessor->cycles.currentOpCycles = 7;
+			pProcessor->cycles.currentOp = 7;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
@@ -815,7 +815,7 @@ void mos6502_INC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_INX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_INX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
@@ -824,7 +824,7 @@ void mos6502_INX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 
 	SR_COND_SET_N(CHK_IF_N(pProcessor->reg.X));
 	SR_COND_SET_Z(CHK_IF_Z(pProcessor->reg.X));
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -835,7 +835,7 @@ void mos6502_INX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_INY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_INY(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
@@ -844,7 +844,7 @@ void mos6502_INY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 
 	SR_COND_SET_N(pProcessor->reg.Y & SR_FLAG_N);
 	SR_COND_SET_Z(pProcessor->reg.Y == 0);
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -856,18 +856,18 @@ void mos6502_INY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_JMP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
-	mos6502_addr address;
+void mos65xx_JMP(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
+	mos65xx_addr address;
 
 	switch (opCode) {
 		case 0x4C: // absolute
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0x6C: // indirect
-			pProcessor->cycles.currentOpCycles = 5;
+			pProcessor->cycles.currentOp = 5;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
@@ -884,7 +884,7 @@ void mos6502_JMP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_JSR(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_JSR(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
@@ -892,7 +892,7 @@ void mos6502_JSR(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 	addrm_stackPush16(pProcessor, pProcessor->reg.PC + 1);
 
 	pProcessor->reg.PC = addrm_read16(pProcessor, pProcessor->reg.PC);
-	pProcessor->cycles.currentOpCycles += 5;
+	pProcessor->cycles.currentOp += 5;
 }
 
 /*******************************************************************************
@@ -903,7 +903,7 @@ void mos6502_JSR(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_LDA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_LDA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	U16 oldPC = pProcessor->reg.PC;
 	U16 address = 0;
@@ -912,28 +912,28 @@ void mos6502_LDA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 		case 0xA9:	// Immediate
 			break;
 		case 0xA5: // zeropage
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0xB5: // zeropage, X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xAD: // absolute
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xBD: // absolute, X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xB9: // absolute, Y
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xA1: // (indirect, X)
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0xB1: // (indirect), Y
-			pProcessor->cycles.currentOpCycles = 5;
+			pProcessor->cycles.currentOp = 5;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
@@ -943,7 +943,7 @@ void mos6502_LDA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 		case 0xBD:
 		case 0xB9:
 		case 0xB1:
-			pProcessor->cycles.currentOpCycles += MOS6502_OUTOFPAGE(oldPC, address);
+			pProcessor->cycles.currentOp += MOS65xx_OUTOFPAGE(oldPC, address);
 			break;
 		default:
 			break;
@@ -962,35 +962,35 @@ void mos6502_LDA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_LDX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_LDX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	U16 oldPC = pProcessor->reg.PC;
-	mos6502_addr address = 0;
+	mos65xx_addr address = 0;
 
 	switch (opCode) {
 		case 0xA2: // immediate
 			break;
 		case 0xA6: // zeropage
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0xB6: // zeropage,Y
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xAE: // absolute
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xBE: // absolute,Y
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
 	pProcessor->reg.X = addrm_read8(pProcessor, address);
 
 	if (opCode == 0xBE) {
-		pProcessor->cycles.currentOpCycles += MOS6502_OUTOFPAGE(oldPC, address);
+		pProcessor->cycles.currentOp += MOS65xx_OUTOFPAGE(oldPC, address);
 	}
 
 	SR_COND_SET_N(CHK_IF_N(pProcessor->reg.X));
@@ -1005,35 +1005,35 @@ void mos6502_LDX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_LDY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_LDY(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	U16 oldPC = pProcessor->reg.PC;
-	mos6502_addr address = 0;
+	mos65xx_addr address = 0;
 
 	switch (opCode) {
 		case 0xA0: //immediate
 			break;
 		case 0xA4: //zeropage
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0xB4: //zeropage,X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xAC: //absolute
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xBC: //absolute,X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
 	pProcessor->reg.Y = addrm_read8(pProcessor, address);
 
 	if (opCode == 0xBC) {
-		pProcessor->cycles.currentOpCycles += MOS6502_OUTOFPAGE(oldPC, address);
+		pProcessor->cycles.currentOp += MOS65xx_OUTOFPAGE(oldPC, address);
 	}
 
 	SR_COND_SET_N(pProcessor->reg.Y & SR_FLAG_N);
@@ -1048,29 +1048,29 @@ void mos6502_LDY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * 0 + + - - -
 *******************************************************************************/
-void mos6502_LSR(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
-	mos6502_addr address;
+void mos65xx_LSR(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
+	mos65xx_addr address;
 	U8 origVal = 0;
 	U8 shiftedVal = 0;
 
 	switch (opCode) {
 		case 0x4A: // accumulator
-			pProcessor->cycles.currentOpCycles = 2;
+			pProcessor->cycles.currentOp = 2;
 			break;
 		case 0x46: // zeropage
-			pProcessor->cycles.currentOpCycles = 5;
+			pProcessor->cycles.currentOp = 5;
 			break;
 		case 0x56: // zeropage,X
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0x4E: // absolute
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0x5E: // absolute,X
-			pProcessor->cycles.currentOpCycles = 7;
+			pProcessor->cycles.currentOp = 7;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	if (opCode == 0x4A) {
@@ -1101,16 +1101,16 @@ void mos6502_LSR(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_NOP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_NOP(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(addrm);
 
-	pProcessor->cycles.currentOpCycles = 0xFF;
+	pProcessor->cycles.currentOp = 0xFF;
 
 	if (opCode == 0xEA) { // Only LEGAL NOP
-		pProcessor->cycles.currentOpCycles = 2;
+		pProcessor->cycles.currentOp = 2;
 	} else {
-		mos6502_ILLNOP(pProcessor, opCode, addrm);
+		mos65xx_ILLNOP(pProcessor, opCode, addrm);
 	}
 }
 
@@ -1122,38 +1122,38 @@ void mos6502_NOP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_ORA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_ORA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
-	mos6502_addr address;
-	mos6502_addr oldPC = pProcessor->reg.PC;
+	mos65xx_addr address;
+	mos65xx_addr oldPC = pProcessor->reg.PC;
 	U8 memValue;
 
 	switch (opCode) {
 		case 0x09:	// immediate
 			break;
 		case 0x05:	// zeropage
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0x15:	// zeropage,X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x0D:	// absolute
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x1D:	// absolute,X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x19:	// absolute,Y
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x01:	// (indirect,X)
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0x11:	// (indirect),Y
-			pProcessor->cycles.currentOpCycles = 5;
+			pProcessor->cycles.currentOp = 5;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
@@ -1165,7 +1165,7 @@ void mos6502_ORA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 		case 0x1D:
 		case 0x19:
 		case 0x11:
-			pProcessor->cycles.currentOpCycles += MOS6502_OUTOFPAGE(oldPC, address);
+			pProcessor->cycles.currentOp += MOS65xx_OUTOFPAGE(oldPC, address);
 			break;
 		default:
 			break;
@@ -1183,13 +1183,13 @@ void mos6502_ORA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_PHA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_PHA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
 	addrm_stackPush8(pProcessor, pProcessor->reg.AC);
-	pProcessor->cycles.currentOpCycles += 2;
+	pProcessor->cycles.currentOp += 2;
 }
 
 /*******************************************************************************
@@ -1203,13 +1203,13 @@ void mos6502_PHA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_PHP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_PHP(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
 	addrm_stackPush8(pProcessor, pProcessor->reg.SR | SR_FLAG_B | SR_FLAG_UNUSED);
-	pProcessor->cycles.currentOpCycles += 2;
+	pProcessor->cycles.currentOp += 2;
 }
 
 /*******************************************************************************
@@ -1220,7 +1220,7 @@ void mos6502_PHP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_PLA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_PLA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
@@ -1229,7 +1229,7 @@ void mos6502_PLA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 
 	SR_COND_SET_N(CHK_IF_N(pProcessor->reg.AC));
 	SR_COND_SET_Z(CHK_IF_Z(pProcessor->reg.AC));
-	pProcessor->cycles.currentOpCycles += 3;
+	pProcessor->cycles.currentOp += 3;
 }
 
 /*******************************************************************************
@@ -1243,13 +1243,13 @@ void mos6502_PLA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * from stack
 *******************************************************************************/
-void mos6502_PLP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_PLP(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
 	pProcessor->reg.SR = addrm_stackPop8(pProcessor) & ~(SR_FLAG_B | SR_FLAG_UNUSED);
-	pProcessor->cycles.currentOpCycles += 3;
+	pProcessor->cycles.currentOp += 3;
 }
 
 /*******************************************************************************
@@ -1260,30 +1260,30 @@ void mos6502_PLP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + + - - -
 *******************************************************************************/
-void mos6502_ROL(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_ROL(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
-	mos6502_addr address;
+	mos65xx_addr address;
 	U8 memValue;
 	U8 tempCarry = SR_GET_C();
 
 	switch (opCode) {
 		case 0x2A:	// accumulator
-			pProcessor->cycles.currentOpCycles = 2;
+			pProcessor->cycles.currentOp = 2;
 			break;
 		case 0x26:	// zeropage
-			pProcessor->cycles.currentOpCycles = 5;
+			pProcessor->cycles.currentOp = 5;
 			break;
 		case 0x36:	// zeropage,X
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0x2E:	// absolute
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0x3E:	// absolute,X
-			pProcessor->cycles.currentOpCycles = 7;
+			pProcessor->cycles.currentOp = 7;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	if (opCode == 0x2A) {
@@ -1316,30 +1316,30 @@ void mos6502_ROL(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + + - - -
 *******************************************************************************/
-void mos6502_ROR(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_ROR(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
-	mos6502_addr address;
+	mos65xx_addr address;
 	U8 memValue;
 	U8 tempCarry = SR_GET_C();
 
 	switch (opCode) {
 		case 0x6A:	// accumulator
-			pProcessor->cycles.currentOpCycles = 2;
+			pProcessor->cycles.currentOp = 2;
 			break;
 		case 0x66:	// zeropage
-			pProcessor->cycles.currentOpCycles = 5;
+			pProcessor->cycles.currentOp = 5;
 			break;
 		case 0x76:	// zeropage,X
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0x6E:	// absolute
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0x7E:	// absolute,X
-			pProcessor->cycles.currentOpCycles = 7;
+			pProcessor->cycles.currentOp = 7;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	if (opCode == 0x6A) {
@@ -1375,14 +1375,14 @@ void mos6502_ROR(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * from stack
 *******************************************************************************/
-void mos6502_RTI(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_RTI(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
 	pProcessor->reg.SR = addrm_stackPop8(pProcessor) & ~(SR_FLAG_B & SR_FLAG_UNUSED);
 	pProcessor->reg.PC = addrm_stackPop16(pProcessor);
-	pProcessor->cycles.currentOpCycles += 5;
+	pProcessor->cycles.currentOp += 5;
 }
 
 /*******************************************************************************
@@ -1393,13 +1393,13 @@ void mos6502_RTI(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_RTS(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_RTS(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
 	pProcessor->reg.PC = addrm_stackPop16(pProcessor) + 1;
-	pProcessor->cycles.currentOpCycles += 5;
+	pProcessor->cycles.currentOp += 5;
 }
 
 /*******************************************************************************
@@ -1410,50 +1410,50 @@ void mos6502_RTS(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + + - - +
 *******************************************************************************/
-void mos6502_SBC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
-	mos6502_addr address;
-	mos6502_addr oldPC = pProcessor->reg.PC;
+void mos65xx_SBC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
+	mos65xx_addr address;
+	mos65xx_addr oldPC = pProcessor->reg.PC;
 	U8 memValue = 0;
 
 	switch (opCode) {
 		case 0xE9: // immediate
 			break;
 		case 0xE5: // zeropage
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0xF5: // zeropage,X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xED: // absolute
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xFD: // absolute,X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xF9: // absolute,Y
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0xE1: // (indirect,X)
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0xF1: // (indirect),Y
-			pProcessor->cycles.currentOpCycles = 5;
+			pProcessor->cycles.currentOp = 5;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
 	memValue = addrm_read8(pProcessor, address);
 	
 	if (SR_GET_D()) {	// Decimal mode
-		pProcessor->reg.AC = mos6502_decAdd(pProcessor, pProcessor->reg.AC, memValue, -1); 
+		pProcessor->reg.AC = mos65xx_decAdd(pProcessor, pProcessor->reg.AC, memValue, -1); 
 	} else {			// Binary mode
-		pProcessor->reg.AC = mos6502_binAdd(pProcessor, pProcessor->reg.AC, ~memValue); 
+		pProcessor->reg.AC = mos65xx_binAdd(pProcessor, pProcessor->reg.AC, ~memValue); 
 	}
 
 	if (opCode == 0xFD || opCode == 0xF9 || opCode == 0xF1) {
-		pProcessor->cycles.currentOpCycles += MOS6502_OUTOFPAGE(oldPC, address);
+		pProcessor->cycles.currentOp += MOS65xx_OUTOFPAGE(oldPC, address);
 	}
 }
 
@@ -1465,14 +1465,14 @@ void mos6502_SBC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - 1 - - -
 *******************************************************************************/
-void mos6502_SEC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_SEC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
 	SR_SET_C();
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -1483,14 +1483,14 @@ void mos6502_SEC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - 1 -
 *******************************************************************************/
-void mos6502_SED(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_SED(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
 	SR_SET_D();
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -1501,14 +1501,14 @@ void mos6502_SED(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - 1 - -
 *******************************************************************************/
-void mos6502_SEI(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_SEI(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
 	SR_SET_I();
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -1519,33 +1519,33 @@ void mos6502_SEI(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_STA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
-	mos6502_addr address;
+void mos65xx_STA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
+	mos65xx_addr address;
 
 	switch (opCode) {	
 		case 0x85: // zeropage
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0x95: // zeropage,X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x8D: // absolute
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x9D: // absolute,X
-			pProcessor->cycles.currentOpCycles = 5;
+			pProcessor->cycles.currentOp = 5;
 			break;
 		case 0x99: // absolute,Y
-			pProcessor->cycles.currentOpCycles = 5;
+			pProcessor->cycles.currentOp = 5;
 			break;
 		case 0x81: // (indirect,X)
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		case 0x91: // (indirect),Y
-			pProcessor->cycles.currentOpCycles = 6;
+			pProcessor->cycles.currentOp = 6;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
@@ -1560,21 +1560,21 @@ void mos6502_STA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_STX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
-	mos6502_addr address;
+void mos65xx_STX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
+	mos65xx_addr address;
 
 	switch (opCode) {
 		case 0x86: // zeropage
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0x96: // zeropage,Y
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x8E: // absolute
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
@@ -1589,21 +1589,21 @@ void mos6502_STX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_STY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
-	mos6502_addr address = 0;
+void mos65xx_STY(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
+	mos65xx_addr address = 0;
 
 	switch (opCode) {
 		case 0x84: // zeropage
-			pProcessor->cycles.currentOpCycles = 3;
+			pProcessor->cycles.currentOp = 3;
 			break;
 		case 0x8C: // absolute
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		case 0x94: // zeropage,X
-			pProcessor->cycles.currentOpCycles = 4;
+			pProcessor->cycles.currentOp = 4;
 			break;
 		default:
-			pProcessor->cycles.currentOpCycles = 0;
+			pProcessor->cycles.currentOp = 0;
 	}
 
 	address = addrm_functions[addrm](pProcessor);
@@ -1618,7 +1618,7 @@ void mos6502_STY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_TAX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_TAX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
@@ -1627,7 +1627,7 @@ void mos6502_TAX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 
 	SR_COND_SET_N(pProcessor->reg.X & SR_FLAG_N);
 	SR_COND_SET_Z(pProcessor->reg.X == 0);
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -1638,7 +1638,7 @@ void mos6502_TAX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_TAY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_TAY(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
@@ -1648,7 +1648,7 @@ void mos6502_TAY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 	/* Update status register zero and negative flags. */
 	SR_COND_SET_N(pProcessor->reg.AC & SR_FLAG_N);
 	SR_COND_SET_Z(pProcessor->reg.AC == 0);
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -1659,7 +1659,7 @@ void mos6502_TAY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_TSX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_TSX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
@@ -1668,7 +1668,7 @@ void mos6502_TSX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 
 	SR_COND_SET_N(CHK_IF_N(pProcessor->reg.X));
 	SR_COND_SET_Z(CHK_IF_Z(pProcessor->reg.X));
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -1679,7 +1679,7 @@ void mos6502_TSX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_TXA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_TXA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
@@ -1688,7 +1688,7 @@ void mos6502_TXA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 
 	SR_COND_SET_N(CHK_IF_N(pProcessor->reg.AC));
 	SR_COND_SET_Z(CHK_IF_Z(pProcessor->reg.AC));
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -1699,13 +1699,13 @@ void mos6502_TXA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * - - - - - -
 *******************************************************************************/
-void mos6502_TXS(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_TXS(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
 	pProcessor->reg.SP = pProcessor->reg.X;
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -1716,7 +1716,7 @@ void mos6502_TXS(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + - - - -
 *******************************************************************************/
-void mos6502_TYA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_TYA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
@@ -1725,7 +1725,30 @@ void mos6502_TYA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 
 	SR_COND_SET_N(pProcessor->reg.AC & SR_FLAG_N);
 	SR_COND_SET_Z(pProcessor->reg.AC == 0);
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
+}
+
+/*******************************************************************************
+* Interrupt
+*
+* push PC+2, push SR, ($FFFE) -> PC
+*
+* N Z C I D V
+* - - - 1 - -
+*******************************************************************************/
+void mos65xx_IRQ(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
+
+	UNUSED(opCode);
+	UNUSED(addrm);
+	
+	pProcessor->cycles.currentOp = 7;
+
+	addrm_stackPush16(pProcessor, pProcessor->reg.PC);
+	addrm_stackPush8(pProcessor, pProcessor->reg.SR | SR_FLAG_UNUSED);
+
+	pProcessor->reg.PC = addrm_read16(pProcessor, 0xFFFE);
+
+	SR_SET_I();
 }
 
 /*******************************************************************************
@@ -1734,21 +1757,21 @@ void mos6502_TYA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 /*******************************************************************************
 * Branch if condition is met.
 *******************************************************************************/
-void mos6502_branch(mos6502_processor_st * pProcessor, U8 condition) {
+void mos65xx_branch(Processor_65xx * pProcessor, U8 condition) {
 
-	mos6502_addr oldPC = pProcessor->reg.PC;
-	mos6502_addr branchAddr = addrm_REL(pProcessor);
+	mos65xx_addr oldPC = pProcessor->reg.PC;
+	mos65xx_addr branchAddr = addrm_REL(pProcessor);
 
 	if (condition) {
 		pProcessor->reg.PC = branchAddr;
-		pProcessor->cycles.currentOpCycles += 1 + MOS6502_OUTOFPAGE(oldPC, branchAddr);
+		pProcessor->cycles.currentOp += 1 + MOS65xx_OUTOFPAGE(oldPC, branchAddr);
 	}
 }
 
 /*******************************************************************************
 * Binary add/subtract function.
 *******************************************************************************/
-U8 mos6502_binAdd(mos6502_processor_st * pProcessor, U8 lValue, U8 rValue) {
+U8 mos65xx_binAdd(Processor_65xx * pProcessor, U8 lValue, U8 rValue) {
 
 	U8 origLValue = lValue;
 
@@ -1769,7 +1792,7 @@ U8 mos6502_binAdd(mos6502_processor_st * pProcessor, U8 lValue, U8 rValue) {
 /*******************************************************************************
 * Decimal add/subtract function.
 *******************************************************************************/
-U8 mos6502_decAdd(mos6502_processor_st * pProcessor, U8 lValue, U8 rValue, I8 operator) {
+U8 mos65xx_decAdd(Processor_65xx * pProcessor, U8 lValue, U8 rValue, I8 operator) {
 
 	U8 retVal = 0;
 
@@ -1807,7 +1830,7 @@ U8 mos6502_decAdd(mos6502_processor_st * pProcessor, U8 lValue, U8 rValue, I8 op
 /*******************************************************************************
 * Comparison function.
 *******************************************************************************/
-void mos6502_compare(mos6502_processor_st * pProcessor, U8 lValue, U8 rValue) {
+void mos65xx_compare(Processor_65xx * pProcessor, U8 lValue, U8 rValue) {
 	SR_COND_SET_N(CHK_IF_N(lValue - rValue));
 	SR_COND_SET_Z(lValue == rValue);
 	SR_COND_SET_C(lValue >= rValue);
@@ -1824,11 +1847,11 @@ void mos6502_compare(mos6502_processor_st * pProcessor, U8 lValue, U8 rValue) {
 * N Z C I D V
 * + + + - - -
 *******************************************************************************/
-void mos6502_ALR(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_ALR(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(opCode);
 	
-	mos6502_addr address = addrm_functions[addrm](pProcessor);
+	mos65xx_addr address = addrm_functions[addrm](pProcessor);
 
 	pProcessor->reg.AC &= addrm_read8(pProcessor, address);
 
@@ -1838,7 +1861,7 @@ void mos6502_ALR(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 
 	SR_COND_SET_Z(pProcessor->reg.AC == 0);
 	SR_RESET_N();
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -1849,18 +1872,18 @@ void mos6502_ALR(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 * N Z C I D V
 * + + + - - -
 *******************************************************************************/
-void mos6502_ANC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_ANC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	
-	mos6502_addr address = addrm_functions[addrm](pProcessor);
+	mos65xx_addr address = addrm_functions[addrm](pProcessor);
 
 	pProcessor->reg.AC &= addrm_read8(pProcessor, address);
 
 	SR_COND_SET_Z(pProcessor->reg.AC == 0);
 	SR_COND_SET_N(pProcessor->reg.AC & SR_FLAG_N);
 	SR_COND_SET_C(pProcessor->reg.AC & SR_FLAG_N);
-	pProcessor->cycles.currentOpCycles += 1;
+	pProcessor->cycles.currentOp += 1;
 }
 
 /*******************************************************************************
@@ -1871,14 +1894,14 @@ void mos6502_ANC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_ANE(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_ANE(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -1889,13 +1912,13 @@ void mos6502_ANE(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_ARR(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_ARR(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -1906,13 +1929,13 @@ void mos6502_ARR(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_DCP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_DCP(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -1923,13 +1946,13 @@ void mos6502_DCP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_ISC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_ISC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -1940,13 +1963,13 @@ void mos6502_ISC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_LAS(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_LAS(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -1957,13 +1980,13 @@ void mos6502_LAS(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_LAX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_LAX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -1974,13 +1997,13 @@ void mos6502_LAX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_LXA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_LXA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -1991,25 +2014,25 @@ void mos6502_LXA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_ILLNOP(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_ILLNOP(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
 * JAMs the processor
 *******************************************************************************/
-void mos6502_JAM(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_JAM(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -2020,13 +2043,13 @@ void mos6502_JAM(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_RLA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_RLA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -2037,13 +2060,13 @@ void mos6502_RLA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_RRA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_RRA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -2054,13 +2077,13 @@ void mos6502_RRA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_SAX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_SAX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -2071,13 +2094,13 @@ void mos6502_SAX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_SBX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_SBX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -2088,13 +2111,13 @@ void mos6502_SBX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_SHA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_SHA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -2105,13 +2128,13 @@ void mos6502_SHA(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_SHX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_SHX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -2122,13 +2145,13 @@ void mos6502_SHX(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_SHY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_SHY(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -2139,13 +2162,13 @@ void mos6502_SHY(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_SLO(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_SLO(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -2156,13 +2179,13 @@ void mos6502_SLO(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_SRE(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_SRE(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -2173,13 +2196,13 @@ void mos6502_SRE(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_TAS(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_TAS(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
 
 /*******************************************************************************
@@ -2190,11 +2213,11 @@ void mos6502_TAS(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm add
 *
 *
 *******************************************************************************/
-void mos6502_USBC(mos6502_processor_st * pProcessor, U8 opCode, mos6502_addrm addrm) {
+void mos65xx_USBC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	
 	UNUSED(pProcessor);
 	UNUSED(opCode);
 	UNUSED(addrm);
 	
-	pProcessor->cycles.currentOpCycles = 0;
+	pProcessor->cycles.currentOp = 0;
 }
