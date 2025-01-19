@@ -71,6 +71,7 @@
 #define CLOCK_FREQ 1000000
 #define TICK_NS (time_t)((double)1 / (double)CLOCK_FREQ * (double)sToNs(1))
 #define KB_SCAN_RATE_NS	msToNs(10)
+#define REFRESH_RATE_NS	msToNs(20)
 
 #define BACKSPACE		"\033[D \033[D"
 
@@ -171,12 +172,14 @@ void c64_init(Processor_65xx * pProcessor) {
 *******************************************************************************/
 void c64_run(Processor_65xx * pProcessor) {
 
-	struct timespec runTime, syncTime, kbScanTime, scrRefresh = {0};
+	struct timespec runTime, syncTime;
+	struct timespec kbScanTime = {0};
+	struct timespec scrRefresh = {0};
 	mos65xx_addr oldPC = 0;
 
 	term_conf();
 
-	for (int ii = 0; ii < 30; ii++) {
+	for (int ii = 0; ii < 35; ii++) {
 		printf("\r\n");
 	}
 
@@ -240,8 +243,8 @@ void c64_run(Processor_65xx * pProcessor) {
 			kbScanTime = runTime;
 		}
 
-		/* Read keyboard every 10 ms. */
-		if (c64_timePassed(&scrRefresh, &runTime, KB_SCAN_RATE_NS)) {
+		/* Refresh screen every 100 ms. */
+		if (c64_timePassed(&scrRefresh, &runTime, REFRESH_RATE_NS)) {
 
 			scrRefresh = runTime;
 			
@@ -342,14 +345,14 @@ static void c64_memWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 v
 * Returns: Nothing.
 *******************************************************************************/
 static void c64_out(void) {
-	U8 line[44];
+	U8 line[41];
 
-	line[40] = '|';
-	line[41] = '\r';
-	line[42] = '\n';
-	line[43] = 0;
+	line[40] = 0;
 
 	printf("\033[1;1H");
+
+	printf("\033[104m                                                \033[m \r\n");
+	printf("\033[104m                                                \033[m \r\n");
 
 	for (int scrIndex = 0x400; scrIndex <= 0x7E7; scrIndex+=40) {
 
@@ -357,9 +360,11 @@ static void c64_out(void) {
 		
 		c64_screenConv(line);
 
-		printf("%s", line);
+		printf("\033[104m    \033[44m\033[94m%s\033[104m    \033[m \r\n", line);
 	}
-	printf("________________________________________\r\n");
+
+	printf("\033[104m                                                \033[m \r\n");
+	printf("\033[104m                                                \033[m \r\n");
 }
 
 /*******************************************************************************
@@ -387,6 +392,10 @@ static void c64_screenConv(U8 * lineIn) {
 		} else if (lineIn[bufIndex] < 64) {
 			/* These symbols and numeric characters match */
 		
+		} else if (lineIn[bufIndex] == 0xA0) {
+			/* Rest TODO */
+			lineIn[bufIndex] = '#';
+
 		} else {
 			/* Rest TODO */
 			lineIn[bufIndex] = '^';

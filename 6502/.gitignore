@@ -2,7 +2,7 @@ a.out
 .vscode/
 **/lib/
 **/obj/
-test_6502.out
+test_65xx.out
 **/lst
 **/bin
 **/map
