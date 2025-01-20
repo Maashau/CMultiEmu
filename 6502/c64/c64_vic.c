@@ -1,64 +1,69 @@
 /*******************************************************************************
-* c64_peripherals.c
+* c64_vic.c
 *
-* Commodore 64 peripheral source file.
+* Commodore 64 VIC II chip source file.
 *******************************************************************************/
 #include <stdio.h>
-#include <unistd.h>
-
 #include <65xx.h>
 
-#include "c64_peripherals.h"
-
 #include "c64_vic.h"
-#include "c64_cia.h"
 
+extern U8 c64_IO[U16_MAX];
+
+U16 c64_vicCurrRasterLine = 0;
+U16 c64_vicRasterIrqLine;
+
+static U8 irqActive;
 
 /*******************************************************************************
-* Functions
-*******************************************************************************/
-/*******************************************************************************
-* Init C64 peripherals.
+* Init VIC II.
 *
 * Arguments:
 *		-
 *
 * Returns: -
 *******************************************************************************/
-void c64_periphInit(void) {
-	c64_vicInit();
-	c64_ciaInit();
+void c64_vicInit(void) {
+	VIC->D011_screenCtrl1 = 0x1B;
+	VIC->D016_screenCtrl2 = 0xC8;
+    c64_vicCurrRasterLine = 0;
 }
 
 /*******************************************************************************
-* Check if any peripherals have active interrupts.
+* Check if VIC II chip has active interrupts.
 *
 * Arguments:
 *		-
 *
 * Returns: true if interrupt(s) active, otherwise 0
 *******************************************************************************/
-U8 c64_periphCheckIrq(void) {
-	U8 irqActive = 0;
-	irqActive |= c64_ciaCheckIrq();
-	irqActive |= c64_vicCheckIrq();
-
+U8 c64_vicCheckIrq(void) {
 	return irqActive;
 }
 
 /*******************************************************************************
-* Tick peripherals.
+* Tick VIC chip.
 *
 * Arguments:
 *		advance - ticks to advance.
 *
 * Returns: -
 *******************************************************************************/
-void c64_periphTick(U64 advance) {
+void c64_vicTick(U64 tickAdvance) {
 
-	c64_vicTick(advance);
-	c64_ciaTick(advance);
+	c64_vicCurrRasterLine += 8 * (tickAdvance + 1);
 
+	if (c64_vicCurrRasterLine >= 312) {
+		c64_vicCurrRasterLine = c64_vicCurrRasterLine - 312;
+	}
+
+	/* Write the most significant bit of raster line. */
+	VIC->D011_screenCtrl1 = (
+		(VIC->D011_screenCtrl1 & (1 << 7))
+	|	(U8)((c64_vicCurrRasterLine & 0x100) >> 1)
+	);
+
+	VIC->D012_currRasterLine = ((U8)c64_vicCurrRasterLine & 0xFF);
 }
 
 /*******************************************************************************
@@ -68,22 +73,14 @@ void c64_periphTick(U64 advance) {
 *		pProcessor	- Pointer to 65xx processor struct.
 *		address 	- Address to read from.
 *
-* Returns: Value read from the peripheral.
+* Returns: Value read from the VIC II.
 *******************************************************************************/
-U8 c64_periphRead(Processor_65xx * pProcessor, mos65xx_addr address) {
-	U8 retVal;
-
-	if (address >= 0xD000 && address <= 0xD03F) {
-		retVal = c64_vicRead(pProcessor, address);
-	} else if (address >= 0xDC00 && address <= 0xDD0F) {
-		retVal = c64_ciaRead(pProcessor, address);
-	}
-
-	return retVal;
+U8 c64_vicRead(Processor_65xx * pProcessor, mos65xx_addr address) {
+	return pProcessor->memAreas.IO[address];
 }
 
 /*******************************************************************************
-* Write peripheral register.
+* Write VIC II register.
 *
 * Arguments:
 *		pProcessor	- Pointer to 65xx processor struct.
@@ -92,11 +89,6 @@ U8 c64_periphRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 *
 * Returns: -
 *******************************************************************************/
-void c64_periphWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value) {
-
-	if (address >= 0xD000 && address <= 0xD03F) {
-		c64_vicWrite(pProcessor, address, value);
-	} else if (address >= 0xDC00 && address <= 0xDD0F) {
-		c64_ciaWrite(pProcessor, address, value);
-	}
+void c64_vicWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value) {
+	pProcessor->memAreas.IO[address] = value;
 }

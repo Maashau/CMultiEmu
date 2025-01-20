@@ -6,6 +6,7 @@
 typedef unsigned char U8;
 typedef signed char I8;
 typedef unsigned short U16;
+typedef unsigned long U32;
 typedef unsigned long long U64;
 
 typedef U16 mos65xx_addr;

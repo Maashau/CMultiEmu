@@ -1,7 +1,7 @@
 /*******************************************************************************
 * c64.c
 *
-* Commodore 64 emulator.
+* Commodore 64 emulator main source file.
 *******************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
@@ -90,11 +90,11 @@ static void c64_screenConv(U8 * lineIn);
 static U8 c64_timePassed(struct timespec * pOldTime, struct timespec * pNewTime, time_t timeToPass);
 static U8 c64_readKeyboard(void);
 
-static void c64_tick(U64 advance);
-
 U8 c64_RAM[U16_MAX];
 U8 c64_ROM[U16_MAX];
 U8 c64_IO[U16_MAX];
+
+U8 clearKeys = 0;
 
 enum {
 	OP_RAM,
@@ -159,7 +159,7 @@ void c64_init(Processor_65xx * pProcessor) {
 	);
 
 	/* Set peripheral default values. */
-	vicII_init();
+	c64_periphInit();
 }
 
 /*******************************************************************************
@@ -173,8 +173,8 @@ void c64_init(Processor_65xx * pProcessor) {
 void c64_run(Processor_65xx * pProcessor) {
 
 	struct timespec runTime, syncTime;
-	struct timespec kbScanTime = {0};
-	struct timespec scrRefresh = {0};
+	U32 kbScan = 0;
+	U32 scrRefresh = 0;
 	mos65xx_addr oldPC = 0;
 
 	term_conf();
@@ -188,7 +188,7 @@ void c64_run(Processor_65xx * pProcessor) {
 
 		clock_gettime(CLOCK_REALTIME, &runTime);
 		
-		if (c64_checkPinIRQ()) {
+		if (c64_periphCheckIrq()) {
 			/* PIN interrupt occured. */
 			mos65xx_irqEnter(pProcessor);
 		}
@@ -208,19 +208,6 @@ void c64_run(Processor_65xx * pProcessor) {
 			DBG_LOG(pProcessor, fprintf(tmpLog, " | IO  %c($%04X)", lastOpType, lastAddr));
 		}
 
-#if 0
-		DBG_LOG(pProcessor, fprintf(
-			tmpLog,
-			" $%02X/$%02X $%02X/$%02X",
-			CIA1->DC0D_intCtrlStatusReg,
-			CIA1_irqEn,
-			CIA2->DD0D_intCtrlStatusReg,
-			CIA2_irqEn
-		));
-
-		DBG_LOG(pProcessor, fprintf(tmpLog, " TIM_A: %d", (CIA1->DC05_timerAValueMSB << 8) | CIA1->DC04_timerAValueLSB));
-#endif
-
 		if (pProcessor->lastOp == 0x40){ /* RTI */
 			mos65xx_irqLeave(pProcessor);
 		}
@@ -232,26 +219,21 @@ void c64_run(Processor_65xx * pProcessor) {
 			break;
 		}
 
-		/* Read keyboard every 10 ms. */
-		if (c64_timePassed(&kbScanTime, &runTime, KB_SCAN_RATE_NS)) {
-
+		kbScan += pProcessor->cycles.currentOp;
+		if (kbScan >= 10000) {
 			if (c64_scanKbd()) {
 				term_deConf();
 				break;
 			}
-
-			kbScanTime = runTime;
+			kbScan = 0;
 		}
 
-		/* Refresh screen every 100 ms. */
-		if (c64_timePassed(&scrRefresh, &runTime, REFRESH_RATE_NS)) {
-
-			scrRefresh = runTime;
-			
+		/*10 Hz output*/
+		scrRefresh += pProcessor->cycles.currentOp;
+		if (scrRefresh >= 20000) {
 			c64_out();
+			scrRefresh = 0;
 		}
-
-		pProcessor->totOperations++;
 
 		/* Sync to 1 Mhz. */
 		do {
@@ -261,18 +243,10 @@ void c64_run(Processor_65xx * pProcessor) {
 		} while (!c64_timePassed(&runTime, &syncTime, pProcessor->cycles.currentOp * TICK_NS));
 
 		
-		c64_tick(pProcessor->cycles.currentOp);
+		c64_periphTick(pProcessor->cycles.currentOp);
+
+		pProcessor->totOperations++;
 	}
-
-	FILE * temp;
-
-	temp = fopen("./endScreen.txt", "w+");
-
-	for (int ii = 0x400; ii <= 0x7E7; ii ++) {
-		fputc(c64_RAM[ii], temp);
-	}
-
-	fclose(temp);
 }
 
 /*******************************************************************************
@@ -296,7 +270,7 @@ static U8 c64_memRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 		memVal = pProcessor->memAreas.RAM[address];
 		lastOpMemType = OP_RAM;
 	} else if (isIO(address)) {
-		memVal = c64_ioRead(pProcessor, address);
+		memVal = c64_periphRead(pProcessor, address);
 		lastOpMemType = OP_IO;
 	} else {
 		memVal = pProcessor->memAreas.ROM[address];
@@ -326,7 +300,7 @@ static void c64_memWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 v
 	}
 
 	if (isIO(address)){
-		c64_ioWrite(pProcessor, address, value);
+		c64_periphWrite(pProcessor, address, value);
 		lastOpMemType = OP_IO;
 	} else {
 		pProcessor->memAreas.RAM[address] = value;
@@ -357,10 +331,10 @@ static void c64_out(void) {
 	for (int scrIndex = 0x400; scrIndex <= 0x7E7; scrIndex+=40) {
 
 		memcpy(line, &c64_RAM[scrIndex], 40);
-
+		
 		c64_screenConv(line);
 
-		printf("\033[104m    \033[44m\033[94m%s\033[104m    \033[m \r\n", line);
+		printf("\033[104m    \033[44m\033[94m%s\033[104m    \033[m           \r\n", line);
 	}
 
 	printf("\033[104m                                                \033[m \r\n");
@@ -416,6 +390,12 @@ static U8 c64_scanKbd(void) {
 	static U8 pressedKey = 0;
 
 	pressedKey = c64_readKeyboard();
+	
+	if (clearKeys) {
+		memset(c64_keyBuffer, 0, sizeof(c64_keyBuffer));
+		
+		clearKeys = 0;
+	}
 
 	if (pressedKey == 0x1B) { // ESC detected.
 		printf(BACKSPACE);
@@ -435,16 +415,14 @@ static U8 c64_scanKbd(void) {
 		U8 keyRow;
 		U16 convKey = c64_keyMap[pressedKey];
 
-		memset(c64_keyBuffer, 0, sizeof(c64_keyBuffer));
-
 		if ((convKey & C64_KB_LSH) == C64_KB_LSH) {
 			c64_keyBuffer[1] = C64_KB_LSH & 0xFF;
 
 			if (convKey & ~C64_KB_LSH & 0xFF00) {
-				convKey &= ~(C64_KB_LSH & 0xFF00);
+				convKey &= ~(C64_KB_LSH & 0xFF00); 
 			}
 			if (convKey & ~C64_KB_LSH & 0xFF) {
-				convKey &= ~(C64_KB_LSH & 0xFF);
+				convKey &= ~(C64_KB_LSH & 0xFF); 
 			}
 		}
 
@@ -460,9 +438,7 @@ static U8 c64_scanKbd(void) {
 			convKey = convKey >> 1;
 		}
 
-		c64_keyBuffer[keyColumn] |= keyRow;
-	} else {
-		memset(c64_keyBuffer, 0, sizeof(c64_keyBuffer));
+		c64_keyBuffer[keyColumn] = keyRow;
 	}
 
 	return 0;
@@ -521,19 +497,4 @@ static U8 c64_timePassed(struct timespec * pOldTime, struct timespec * pNewTime,
 	}
 
 	return passed;
-}
-
-/*******************************************************************************
-* 1 Mhz tick.
-*
-* Arguments:
-*		tickCounter
-*
-* Returns: -
-*******************************************************************************/
-static void c64_tick(U64 advance) {
-
-	vicII_tick(advance);
-	CIA_tick(advance);
-
 }
