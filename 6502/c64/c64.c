@@ -357,7 +357,7 @@ static void c64_out(void) {
 	for (int scrIndex = 0x400; scrIndex <= 0x7E7; scrIndex+=40) {
 
 		memcpy(line, &c64_RAM[scrIndex], 40);
-		
+
 		c64_screenConv(line);
 
 		printf("\033[104m    \033[44m\033[94m%s\033[104m    \033[m \r\n", line);
@@ -416,8 +416,6 @@ static U8 c64_scanKbd(void) {
 	static U8 pressedKey = 0;
 
 	pressedKey = c64_readKeyboard();
-	
-	memset(c64_keyBuffer, 0, sizeof(c64_keyBuffer));
 
 	if (pressedKey == 0x1B) { // ESC detected.
 		printf(BACKSPACE);
@@ -437,14 +435,16 @@ static U8 c64_scanKbd(void) {
 		U8 keyRow;
 		U16 convKey = c64_keyMap[pressedKey];
 
+		memset(c64_keyBuffer, 0, sizeof(c64_keyBuffer));
+
 		if ((convKey & C64_KB_LSH) == C64_KB_LSH) {
 			c64_keyBuffer[1] = C64_KB_LSH & 0xFF;
 
 			if (convKey & ~C64_KB_LSH & 0xFF00) {
-				convKey &= ~(C64_KB_LSH & 0xFF00); 
+				convKey &= ~(C64_KB_LSH & 0xFF00);
 			}
 			if (convKey & ~C64_KB_LSH & 0xFF) {
-				convKey &= ~(C64_KB_LSH & 0xFF); 
+				convKey &= ~(C64_KB_LSH & 0xFF);
 			}
 		}
 
@@ -460,7 +460,9 @@ static U8 c64_scanKbd(void) {
 			convKey = convKey >> 1;
 		}
 
-		c64_keyBuffer[keyColumn] = keyRow;
+		c64_keyBuffer[keyColumn] |= keyRow;
+	} else {
+		memset(c64_keyBuffer, 0, sizeof(c64_keyBuffer));
 	}
 
 	return 0;
