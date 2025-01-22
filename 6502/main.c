@@ -184,11 +184,11 @@ int main(int argc, char * argv[]) {
 						printf(BACKSPACE);
 					}
 				} else if (pressedKey == 0x09) { // TAB pressed (reset).
-					Memory_areas memAreas;
-					memAreas.RAM = memory;
-					memAreas.ROM = NULL;
-					memAreas.IO = NULL;
-					mos65xx_init(&processor, &memAreas, fnMemRead, fnMemWrite, pCliArguments->debugLogging, pCliArguments);
+					Memory_areas mem;
+					mem.RAM = memory;
+					mem.ROM = NULL;
+					mem.IO = NULL;
+					mos65xx_init(&processor, &mem, fnMemRead, fnMemWrite, pCliArguments->debugLogging, pCliArguments);
 					DRAW_TERM(screenClear(&processor));
 				}
 
@@ -252,14 +252,14 @@ int main(int argc, char * argv[]) {
 *******************************************************************************/
 U8 fnMemRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 	if (((Parameters *)pProcessor->pUtil)->selectedProgram == PRG_APPLE_I && address == 0xD010) {
-		pProcessor->memAreas.RAM[0xD011] = 0;
+		pProcessor->mem.RAM[0xD011] = 0;
 	}
 
 	if (!isROMAddress(address) && !isRAMAddress(address)) {
 		return 0;
 	}
 
-	return pProcessor->memAreas.RAM[address];
+	return pProcessor->mem.RAM[address];
 }
 
 /*******************************************************************************
@@ -273,7 +273,7 @@ U8 fnMemRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 *******************************************************************************/
 void fnMemWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value) {
 	if (!isROMAddress(address)) {
-		pProcessor->memAreas.RAM[address] = value;
+		pProcessor->mem.RAM[address] = value;
 	}
 }
 
@@ -397,13 +397,13 @@ void programSelector(Processor_65xx * pProcessor, Parameters * parameters, U8 * 
 	if (parameters->selectedProgram != PRG_APPLE_I
 	&&	parameters->selectedProgram != PRG_C64
 	) {
-		Memory_areas memAreas;
+		Memory_areas mem;
 
-		memAreas.RAM = pMemory;
-		memAreas.ROM = NULL;
-		memAreas.IO = NULL;
+		mem.RAM = pMemory;
+		mem.ROM = NULL;
+		mem.IO = NULL;
 
-		mos65xx_init(pProcessor, &memAreas, fnMemRead, fnMemWrite, parameters->debugLogging, parameters);
+		mos65xx_init(pProcessor, &mem, fnMemRead, fnMemWrite, parameters->debugLogging, parameters);
 
 		screenClear(pProcessor);
 

@@ -56,9 +56,9 @@ void mos65xx_init(
 
 	memset(pProcessor, 0, sizeof(Processor_65xx));
 
-	pProcessor->memAreas.ROM = pMemory->ROM;
-	pProcessor->memAreas.RAM = pMemory->RAM;
-	pProcessor->memAreas.IO = pMemory->IO;
+	pProcessor->mem.ROM = pMemory->ROM;
+	pProcessor->mem.RAM = pMemory->RAM;
+	pProcessor->mem.IO = pMemory->IO;
 	pProcessor->fnMemRead = fnMemRead;
 	pProcessor->fnMemWrite = fnMemWrite;
 	pProcessor->debugLevel = debugLevel;

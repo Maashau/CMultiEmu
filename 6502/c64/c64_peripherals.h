@@ -12,7 +12,6 @@
 * SID chip definitions
 *******************************************************************************/
 #define SID_START_ADDR 0xD400
-#define SID ((Sid_t *)&c64_IO[SID_START_ADDR])
 
 typedef struct {
 	U8 D400_voice1FreqLSB; // Write-only
@@ -67,8 +66,8 @@ typedef struct {
 /*******************************************************************************
 * Functions
 *******************************************************************************/
-void c64_periphInit(void);
+void c64_periphInit(Processor_65xx * pProcessor);
 U8 c64_periphCheckIrq(void);
-void c64_periphTick(U64 advance);
+void c64_periphTick(Processor_65xx * pProcessor, U8 advance);
 U8 c64_periphRead(Processor_65xx * pProcessor, mos65xx_addr address);
 void c64_periphWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value);

@@ -8,7 +8,6 @@
 
 #include "c64_cia.h"
 
-extern U8 c64_IO[U16_MAX];
 extern U8 c64_keyBuffer[8];
 
 enum {
@@ -19,30 +18,30 @@ enum {
 };
 
 typedef struct {
-	U16 *	DEF;
-	U8 *	LSB;
-	U8 *	MSB;
-	U8 *	CTRL;
+	U16 *			DEF;
+	mos65xx_addr	LSB;
+	mos65xx_addr	MSB;
+	mos65xx_addr	CTRL;
 } CIA_Timer;
 
 
-static void CIA__timAdvance(U8 timerID, U64 advance);
+static void CIA__timAdvance(Processor_65xx * pProcessor, U8 timerID, U64 advance);
 
 extern U8 clearKeys;
 
-U16 CIA1_timAStartVal;
-U16 CIA1_timBStartVal;
-U16 CIA2_timAStartVal;
-U16 CIA2_timBStartVal;
+static U16 CIA1_timAStartVal;
+static U16 CIA1_timBStartVal;
+static U16 CIA2_timAStartVal;
+static U16 CIA2_timBStartVal;
 
-U8 CIA1_irqEn;
-U8 CIA2_irqEn;
+static U8 CIA1_irqEn;
+static U8 CIA2_irqEn;
 
-CIA_Timer timers[] = {
-	{&CIA1_timAStartVal, &CIA1->DC04_timerAValueLSB, &CIA1->DC05_timerAValueMSB, &CIA1->DC0E_timerACtrl},
-	{&CIA1_timBStartVal, &CIA1->DC06_timerBValueLSB, &CIA1->DC07_timerBValueMSB, &CIA1->DC0F_timerBCtrl},
-	{&CIA2_timAStartVal, &CIA2->DD04_timerAValueLSB, &CIA2->DD05_timerAValueMSB, &CIA2->DD0E_timerACtrl},
-	{&CIA2_timBStartVal, &CIA2->DD06_timerBValueLSB, &CIA2->DD07_timerBValueMSB, &CIA2->DD0F_timerBCtrl}
+static CIA_Timer timers[] = {
+	{&CIA1_timAStartVal, DC04_timerAValueLSB, DC05_timerAValueMSB, DC0E_timerACtrl},
+	{&CIA1_timBStartVal, DC06_timerBValueLSB, DC07_timerBValueMSB, DC0F_timerBCtrl},
+	{&CIA2_timAStartVal, DD04_timerAValueLSB, DD05_timerAValueMSB, DD0E_timerACtrl},
+	{&CIA2_timBStartVal, DD06_timerBValueLSB, DD07_timerBValueMSB, DD0F_timerBCtrl}
 };
 
 static U8 irqActive;
@@ -55,8 +54,8 @@ static U8 irqActive;
 *
 * Returns: -
 *******************************************************************************/
-void c64_ciaInit(void) {
-
+void c64_ciaInit(Processor_65xx * pProcessor) {
+	pProcessor = pProcessor;
 }
 
 /*******************************************************************************
@@ -79,15 +78,15 @@ U8 c64_ciaCheckIrq(void) {
 *
 * Returns: -
 *******************************************************************************/
-void c64_ciaTick(U64 tickAdvance) {
+void c64_ciaTick(Processor_65xx * pProcessor, U8 tickAdvance) {
 
-	CIA__timAdvance(CIA1_TIM_A, tickAdvance);
-	CIA__timAdvance(CIA1_TIM_B, tickAdvance);
-	CIA__timAdvance(CIA2_TIM_A, tickAdvance);
-	CIA__timAdvance(CIA2_TIM_B, tickAdvance);
+	CIA__timAdvance(pProcessor, CIA1_TIM_A, tickAdvance);
+	CIA__timAdvance(pProcessor, CIA1_TIM_B, tickAdvance);
+	CIA__timAdvance(pProcessor, CIA2_TIM_A, tickAdvance);
+	CIA__timAdvance(pProcessor, CIA2_TIM_B, tickAdvance);
 
-	if ((CIA1->DC0D_intCtrlStatusReg & CIA1_irqEn & CIA_IRQ_EN_MASK)
-	||	(CIA2->DD0D_intCtrlStatusReg & CIA2_irqEn & CIA_IRQ_EN_MASK)
+	if ((pProcessor->mem.IO[DC0D_intCtrlStatusReg] & CIA1_irqEn & CIA_IRQ_EN_MASK)
+	||	(pProcessor->mem.IO[DD0D_intCtrlStatusReg] & CIA2_irqEn & CIA_IRQ_EN_MASK)
 	) {
 		irqActive = 1;
 	} else {
@@ -109,10 +108,10 @@ U8 c64_ciaRead(Processor_65xx * pProcessor, mos65xx_addr address) {
     U8 retVal;
 
 	if (address == 0xDC01) {
-		U8 tempCol = ~CIA1->DC00_portAKbdColJStick2;
+		U8 tempCol = ~pProcessor->mem.IO[DC00_portAKbdColJStick2];
         U8 buttonPressed = 0;
 
-		CIA1->DC01_portBKbdRowJStick1 = 0xFF;
+		pProcessor->mem.IO[DC01_portBKbdRowJStick1] = 0xFF;
 
         for (U8 checkIdx = 0; checkIdx < sizeof(c64_keyBuffer); checkIdx++) {
             if (c64_keyBuffer[checkIdx] != 0) {
@@ -129,11 +128,11 @@ U8 c64_ciaRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 				if (tempCol & 1){
 
                     if (c64_keyBuffer[currCol] != 0) {
-                        U8 rowMask = ~CIA1->DC01_portBKbdRowJStick1;
+                        U8 rowMask = ~pProcessor->mem.IO[DC01_portBKbdRowJStick1];
 
                         rowMask |= c64_keyBuffer[currCol];
 
-                        CIA1->DC01_portBKbdRowJStick1 = ~rowMask;
+                        pProcessor->mem.IO[DC01_portBKbdRowJStick1] = ~rowMask;
                         
                         clearKeys = 1;
                     }
@@ -144,13 +143,13 @@ U8 c64_ciaRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 		}
 	}
 
-	retVal = pProcessor->memAreas.IO[address];
+	retVal = pProcessor->mem.IO[address];
 	
 	if (
 		address == 0xDC0D
 	||	address == 0xDD0D
 	) {
-		pProcessor->memAreas.IO[address] = 0;
+		pProcessor->mem.IO[address] = 0;
 	}
 
     return retVal;
@@ -202,7 +201,7 @@ void c64_ciaWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value) {
 		?	CIA2_irqEn | (value & 0x7F)
 		:	(CIA2_irqEn & ~value) & 0x7F;
 	} else {
-		pProcessor->memAreas.IO[address] = value;
+		pProcessor->mem.IO[address] = value;
 	}
 }
 
@@ -215,24 +214,24 @@ void c64_ciaWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value) {
 *
 * Returns: -
 *******************************************************************************/
-static void CIA__timAdvance(U8 timerID, U64 advance) {
+static void CIA__timAdvance(Processor_65xx * pProcessor, U8 timerID, U64 advance) {
 
     /* Timer is set to reload. */
-	if (*timers[timerID].CTRL & TIM_RELOAD) {
+	if (pProcessor->mem.IO[timers[timerID].CTRL] & TIM_RELOAD) {
 
-		*timers[timerID].MSB = *timers[timerID].DEF >> 8;
-		*timers[timerID].LSB = *timers[timerID].DEF & 0xFF;
+		pProcessor->mem.IO[timers[timerID].MSB] = *timers[timerID].DEF >> 8;
+		pProcessor->mem.IO[timers[timerID].LSB] = *timers[timerID].DEF & 0xFF;
 
-		*timers[timerID].CTRL &= ~TIM_RELOAD;
+		pProcessor->mem.IO[timers[timerID].CTRL] &= ~TIM_RELOAD;
 	}
 
     /* Timer is running */
-	if (*timers[timerID].CTRL & TIM_START) {
+	if (pProcessor->mem.IO[timers[timerID].CTRL] & TIM_START) {
 		U8 uflow = 0;
 		U16 timerValue, oldValue;
 
-		timerValue = *timers[timerID].MSB << 8;
-		timerValue |= *timers[timerID].LSB & 0xFF;
+		timerValue = pProcessor->mem.IO[timers[timerID].MSB] << 8;
+		timerValue |= pProcessor->mem.IO[timers[timerID].LSB] & 0xFF;
 		
 		oldValue = timerValue;
 		timerValue -= (U16)advance;
@@ -245,40 +244,40 @@ static void CIA__timAdvance(U8 timerID, U64 advance) {
 			uflow = 1;
 
             /* Reload on underflow or stop the timer. */
-			if ((*timers[timerID].CTRL & TIM_STOP_UFLOW) == 0) {
+			if ((pProcessor->mem.IO[timers[timerID].CTRL] & TIM_STOP_UFLOW) == 0) {
 				timerValue = *timers[timerID].DEF - (U16_MAX - timerValue);
 
 			} else {
-				*timers[timerID].CTRL &= 0xFE;
+				pProcessor->mem.IO[timers[timerID].CTRL] &= 0xFE;
 				timerValue = 0;
 			}
 		}
 
         /* Set new timer value. */
-		*timers[timerID].MSB = timerValue >> 8;
-		*timers[timerID].LSB = timerValue & 0xFF;
+		pProcessor->mem.IO[timers[timerID].MSB] = timerValue >> 8;
+		pProcessor->mem.IO[timers[timerID].LSB] = timerValue & 0xFF;
 
         /* On underflow, trigger interrupt. */
 		if (uflow) {
-            CIA1->DC0D_intCtrlStatusReg |= CIA_IRQ_CS_TIM_A;
+            pProcessor->mem.IO[DC0D_intCtrlStatusReg] |= CIA_IRQ_CS_TIM_A;
 
 			if (timerID == CIA1_TIM_A
-            &&  *timers[timerID].CTRL & TIM_PORTB_UFLOW && uflow
+            &&  pProcessor->mem.IO[timers[timerID].CTRL] & TIM_PORTB_UFLOW && uflow
             ) {
 					// TODO: portA bit 6 ON
 			}
 			if (timerID == CIA1_TIM_B
-            &&  *timers[timerID].CTRL & TIM_PORTB_UFLOW && uflow
+            &&  pProcessor->mem.IO[timers[timerID].CTRL] & TIM_PORTB_UFLOW && uflow
             ) {
 					// TODO: portA bit 7 ON
 			}
 			if (timerID == CIA2_TIM_A
-            &&  *timers[timerID].CTRL & TIM_PORTB_UFLOW && uflow
+            &&  pProcessor->mem.IO[timers[timerID].CTRL] & TIM_PORTB_UFLOW && uflow
             ) {
 					// TODO: portB bit 6 ON
 			}
 			if (timerID == CIA2_TIM_B
-            &&  *timers[timerID].CTRL & TIM_PORTB_UFLOW && uflow
+            &&  pProcessor->mem.IO[timers[timerID].CTRL] & TIM_PORTB_UFLOW && uflow
             ) {
 					// TODO: portB bit 7 ON
 			}

@@ -11,7 +11,7 @@ assemble :
 	make -C $(ASMDIR) -B
 
 test_65xx.out : $(OBJ)/main.o $(LIB)/65xx.lib $(APPLE_I_LIB)/apple_i.lib $(C64_LIB)/c64.lib
-	$(CC) -o $@ $^
+	$(CC) -o $@ $^ -lSDL2
 
 $(APPLE_I_LIB)/apple_i.lib :
 	make -C apple_i -B

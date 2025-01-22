@@ -25,9 +25,9 @@
 *
 * Returns: -
 *******************************************************************************/
-void c64_periphInit(void) {
-	c64_vicInit();
-	c64_ciaInit();
+void c64_periphInit(Processor_65xx * pProcessor) {
+	c64_vicInit(pProcessor);
+	c64_ciaInit(pProcessor);
 }
 
 /*******************************************************************************
@@ -54,10 +54,10 @@ U8 c64_periphCheckIrq(void) {
 *
 * Returns: -
 *******************************************************************************/
-void c64_periphTick(U64 advance) {
+void c64_periphTick(Processor_65xx * pProcessor, U8 advance) {
 
-	c64_vicTick(advance);
-	c64_ciaTick(advance);
+	c64_vicTick(pProcessor, advance);
+	c64_ciaTick(pProcessor, advance);
 
 }
 
@@ -70,6 +70,7 @@ void c64_periphTick(U64 advance) {
 *
 * Returns: Value read from the peripheral.
 *******************************************************************************/
+#include <stdlib.h>
 U8 c64_periphRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 	U8 retVal;
 
@@ -77,7 +78,18 @@ U8 c64_periphRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 		retVal = c64_vicRead(pProcessor, address);
 	} else if (address >= 0xDC00 && address <= 0xDD0F) {
 		retVal = c64_ciaRead(pProcessor, address);
+	} else if (address >= 0xD800 && address <= 0xDBE7) {
+		retVal = pProcessor->mem.IO[address];
 	}
+#if 0
+	else {
+		system("/bin/stty cooked");
+		printf("Address ($%04X) read not mapped!\r\n", address);
+		exit(0);
+	}
+#else
+
+#endif
 
 	return retVal;
 }
@@ -98,5 +110,17 @@ void c64_periphWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value
 		c64_vicWrite(pProcessor, address, value);
 	} else if (address >= 0xDC00 && address <= 0xDD0F) {
 		c64_ciaWrite(pProcessor, address, value);
+	} else if (address >= 0xD800 && address <= 0xDBE7) {
+		pProcessor->mem.IO[address] = value;
 	}
+
+#if 0
+	else {
+		system("/bin/stty cooked");
+		printf("Address ($%04X) write not mapped!\r\n", address);
+		exit(0);
+	}
+#else
+
+#endif
 }

@@ -42,11 +42,12 @@ typedef struct Processor_65xx_st {
 	mos65xx_memWrite	fnMemWrite;
 	processor_cycles_st	cycles;
 	size_t				totOperations;
-	Memory_areas		memAreas;
+	Memory_areas		mem;
 	void *				pUtil;
 	U8					lastOp;
 	U8					interrupt;
 	U8					debugLevel;
+	void *				event;
 } Processor_65xx;
 
 typedef enum {

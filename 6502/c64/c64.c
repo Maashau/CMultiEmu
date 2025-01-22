@@ -10,10 +10,13 @@
 #include <time.h>
 // Non-blocking fgetc()
 #include <fcntl.h>
+#include <SDL2/SDL.h>
 
 #include <65xx.h>
 
+#include "c64.h"
 #include "c64_peripherals.h"
+#include "c64_vic.h"
 
 #define TRUE	1U
 #define FALSE	0U
@@ -24,15 +27,6 @@
 #define TSPEC_NSEC_MAX 999999999U
 
 #define CHAREN_BIT (1 << 2)
-
-#define C64BASIC_START	0xA000U
-#define C64BASIC_END	0xBFFFU
-
-#define C64CHAR_START	0xD000U
-#define C64CHAR_END		0xDFFFU
-
-#define C64KERNAL_START	0xE000U
-#define C64KERNAL_END	0xFFFFU
 
 #define usToNs(_usecs)	(_usecs * 1000U)
 #define msToNs(_msecs)	(usToNs(_msecs) * 1000U)
@@ -45,28 +39,28 @@
 #define notLarger(_value, _max) (_value <= _max)
 #define isInRange(_value, _min, _max) (notSmaller(_value, _min) && notLarger(_value, _max))
 
-#define DATA_DIR_REG c64_RAM[0]
-#define PORT_REG c64_RAM[1]
+#define DATA_DIR_REG 	((mos65xx_addr)0)
+#define PORT_REG 		((mos65xx_addr)1)
 
-#define loRamEnabled() (!((PORT_REG & 3) == 3)) // Only ROM when 0b...11
-#define midRamEnabled() ((PORT_REG ^ 3) == 3)
-#define hiRamEnabled() (!(PORT_REG & 2)) // Only ROM when 0b...1x
+#define loRamEnabled(_pProcessor) (!((_pProcessor->mem.RAM[PORT_REG] & 3) == 3)) // Only ROM when 0b...11
+#define midRamEnabled(_pProcessor) ((_pProcessor->mem.RAM[PORT_REG] ^ 3) == 3)
+#define hiRamEnabled(_pProcessor) (!(_pProcessor->mem.RAM[PORT_REG] & 2)) // Only ROM when 0b...1x
 
-#define charRomEnabled() (!(PORT_REG & CHAREN_BIT) && !midRamEnabled())
-#define ioAreaVisible() ((PORT_REG & CHAREN_BIT) && !midRamEnabled())
+#define charRomEnabled(_pProcessor) (!(_pProcessor->mem.RAM[PORT_REG] & CHAREN_BIT) && !midRamEnabled(_pProcessor))
+#define ioAreaVisible(_pProcessor) ((_pProcessor->mem.RAM[PORT_REG] & CHAREN_BIT) && !midRamEnabled(_pProcessor))
 
-#define isRAM(_address) (								\
-	isInRange(_address, C64BASIC_START, C64BASIC_END) 	\
-	? 	(loRamEnabled() ? TRUE : FALSE) 				\
-	:	isInRange(_address, C64CHAR_START, C64CHAR_END) \
-		?	(midRamEnabled() ? TRUE : FALSE)			\
-		:	notSmaller(_address, C64KERNAL_START)		\
-			?	(hiRamEnabled() ? TRUE : FALSE)			\
-			:	FALSE									\
+#define isRAM(_pProcessor, _address) (						\
+	isInRange(_address, C64BASIC_START, C64BASIC_END) 		\
+	? 	(loRamEnabled(_pProcessor) ? TRUE : FALSE) 			\
+	:	isInRange(_address, C64CHAR_START, C64CHAR_END) 	\
+		?	(midRamEnabled(_pProcessor) ? TRUE : FALSE)		\
+		:	notSmaller(_address, C64KERNAL_START)			\
+			?	(hiRamEnabled(_pProcessor) ? TRUE : FALSE)		\
+			:	FALSE										\
 )
 
-#define isIO(_address) \
-	isInRange(_address, C64CHAR_START, C64CHAR_END) ? ioAreaVisible() : FALSE
+#define isIO(_pProcessor, _address) \
+	isInRange(_address, C64CHAR_START, C64CHAR_END) ? ioAreaVisible(_pProcessor) : FALSE
 
 #define CLOCK_FREQ 1000000
 #define TICK_NS (time_t)((double)1 / (double)CLOCK_FREQ * (double)sToNs(1))
@@ -75,24 +69,13 @@
 
 #define BACKSPACE		"\033[D \033[D"
 
-#define KBD_ADDR     0xD010U
-#define KBDCR_ADDR   0xD011U
-#define DSP_ADDR     0xD012U
-#define DSPCR_ADDR   0xD013U
-
 static U8 c64_memRead(Processor_65xx * pProcessor, mos65xx_addr address);
 static void c64_memWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value);
 
-static void c64_out(void);
 static U8 c64_scanKbd(void);
-static void c64_screenConv(U8 * lineIn);
 
 static U8 c64_timePassed(struct timespec * pOldTime, struct timespec * pNewTime, time_t timeToPass);
 static U8 c64_readKeyboard(void);
-
-U8 c64_RAM[U16_MAX];
-U8 c64_ROM[U16_MAX];
-U8 c64_IO[U16_MAX];
 
 U8 clearKeys = 0;
 
@@ -106,11 +89,6 @@ U8 lastOpType = 0;
 mos65xx_addr lastAddr = 0;
 
 extern FILE * tmpLog;
-
-extern U8 CIA1_irqEn;
-extern U8 CIA2_irqEn;
-
-pthread_t tickThread;
 
 U8 c64_keyBuffer[8];
 
@@ -126,40 +104,40 @@ U8 c64_keyBuffer[8];
 *******************************************************************************/
 void c64_init(Processor_65xx * pProcessor) {
 
-	Memory_areas memAreas;
+	Memory_areas mem;
+
+	mem.RAM = malloc(U16_MAX);
+	mem.ROM = malloc(U16_MAX);
+	mem.IO = malloc(U16_MAX);
 
 	addRAMArea(0x0000, 0xFFFF);
 
 	addROMArea(C64BASIC_START, C64BASIC_END); // Basic
-	loadFile(c64_ROM, C64BASIC_START, "./c64/roms/bin/c64Basic.rom", mos65xx_BIN);
+	loadFile(mem.ROM, C64BASIC_START, "./c64/roms/bin/c64Basic.rom", mos65xx_BIN);
 
 	addROMArea(C64CHAR_START, C64CHAR_END); // CHAR rom
-	loadFile(c64_ROM, C64CHAR_START, "./c64/roms/bin/c64Char.rom", mos65xx_BIN);
+	loadFile(mem.ROM, C64CHAR_START, "./c64/roms/bin/c64Char.rom", mos65xx_BIN);
 
 	addROMArea(C64KERNAL_START, C64KERNAL_END); // Kernal
-	loadFile(c64_ROM, C64KERNAL_START, "./c64/roms/bin/c64Kernal.rom", mos65xx_BIN);
+	loadFile(mem.ROM, C64KERNAL_START, "./c64/roms/bin/c64Kernal.rom", mos65xx_BIN);
 
 	addIOArea(C64CHAR_START, C64CHAR_END);
-
-	memAreas.RAM = c64_RAM;
-	memAreas.ROM = c64_ROM;
-	memAreas.IO = c64_IO;
 	
 
-	DATA_DIR_REG = 0x2F; // Default = 0b0010 1111
-	PORT_REG = 0x07;// Default = 0b0000 0111
+	mem.RAM[DATA_DIR_REG] = 0x2F; // Default = 0b0010 1111
+	mem.RAM[PORT_REG] = 0x07;// Default = 0b0000 0111
 
 	mos65xx_init(
 		pProcessor,
-		&memAreas,
+		&mem,
 		c64_memRead,
 		c64_memWrite,
-		0,
+		2,
 		NULL
 	);
 
 	/* Set peripheral default values. */
-	c64_periphInit();
+	c64_periphInit(pProcessor);
 }
 
 /*******************************************************************************
@@ -174,20 +152,22 @@ void c64_run(Processor_65xx * pProcessor) {
 
 	struct timespec runTime, syncTime;
 	U32 kbScan = 0;
-	U32 scrRefresh = 0;
 	mos65xx_addr oldPC = 0;
 
-	term_conf();
+	SDL_Event nextEvent;
 
-	for (int ii = 0; ii < 35; ii++) {
-		printf("\r\n");
-	}
+	pProcessor->event = &nextEvent;
+
+#if 1
+	term_conf();
+#endif
 
 	while (1) {
-		oldPC = pProcessor->reg.PC;
 
+		oldPC = pProcessor->reg.PC;
+#if 1
 		clock_gettime(CLOCK_REALTIME, &runTime);
-		
+#endif	
 		if (c64_periphCheckIrq()) {
 			/* PIN interrupt occured. */
 			mos65xx_irqEnter(pProcessor);
@@ -199,7 +179,7 @@ void c64_run(Processor_65xx * pProcessor) {
 			printf("\033[m\n\n0x%04X: Invalid opcode!\n\n", oldPC);
 			break;
 		}
-
+#if 1
 		if (lastOpMemType == OP_RAM) {
 			DBG_LOG(pProcessor, fprintf(tmpLog, " | RAM %c($%04X)", lastOpType, lastAddr));
 		} else if (lastOpMemType == OP_ROM) {
@@ -207,18 +187,18 @@ void c64_run(Processor_65xx * pProcessor) {
 		} else if (lastOpMemType == OP_IO) {
 			DBG_LOG(pProcessor, fprintf(tmpLog, " | IO  %c($%04X)", lastOpType, lastAddr));
 		}
-
+#endif
 		if (pProcessor->lastOp == 0x40){ /* RTI */
 			mos65xx_irqLeave(pProcessor);
 		}
-
+#if 1
 		if (pProcessor->reg.PC == oldPC) {
 
 			term_deConf();
 			printf("\033[m\n\n0x%04X: Infinite loop detected!\n\n", oldPC);
 			break;
 		}
-
+#if 1
 		kbScan += pProcessor->cycles.currentOp;
 		if (kbScan >= 10000) {
 			if (c64_scanKbd()) {
@@ -227,13 +207,7 @@ void c64_run(Processor_65xx * pProcessor) {
 			}
 			kbScan = 0;
 		}
-
-		/*10 Hz output*/
-		scrRefresh += pProcessor->cycles.currentOp;
-		if (scrRefresh >= 20000) {
-			c64_out();
-			scrRefresh = 0;
-		}
+#endif
 
 		/* Sync to 1 Mhz. */
 		do {
@@ -241,12 +215,18 @@ void c64_run(Processor_65xx * pProcessor) {
 			clock_gettime(CLOCK_REALTIME, &syncTime);
 
 		} while (!c64_timePassed(&runTime, &syncTime, pProcessor->cycles.currentOp * TICK_NS));
-
+#endif
 		
-		c64_periphTick(pProcessor->cycles.currentOp);
+		c64_periphTick(pProcessor, pProcessor->cycles.currentOp);
 
 		pProcessor->totOperations++;
+
+		if (nextEvent.type == SDL_QUIT) {
+			break;
+		}
+		nextEvent.type = 0;
 	}
+	term_deConf();
 }
 
 /*******************************************************************************
@@ -266,14 +246,14 @@ static U8 c64_memRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 		lastOpType = 'R';
 	}
 
-	if (!isROMAddress(address) || isRAM(address)) {
-		memVal = pProcessor->memAreas.RAM[address];
+	if (!isROMAddress(address) || isRAM(pProcessor, address)) {
+		memVal = pProcessor->mem.RAM[address];
 		lastOpMemType = OP_RAM;
-	} else if (isIO(address)) {
+	} else if (isIO(pProcessor, address)) {
 		memVal = c64_periphRead(pProcessor, address);
 		lastOpMemType = OP_IO;
 	} else {
-		memVal = pProcessor->memAreas.ROM[address];
+		memVal = pProcessor->mem.ROM[address];
 		lastOpMemType = OP_ROM;
 	}
 
@@ -299,82 +279,15 @@ static void c64_memWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 v
 		lastOpType = 'W';
 	}
 
-	if (isIO(address)){
+	if (isIO(pProcessor, address)){
 		c64_periphWrite(pProcessor, address, value);
 		lastOpMemType = OP_IO;
 	} else {
-		pProcessor->memAreas.RAM[address] = value;
+		pProcessor->mem.RAM[address] = value;
 		lastOpMemType = OP_RAM;
 	}
 
 	lastAddr = address;
-}
-
-/*******************************************************************************
-* Handles terminal style output.
-*
-* Arguments:
-*	none
-*
-* Returns: Nothing.
-*******************************************************************************/
-static void c64_out(void) {
-	U8 line[41];
-
-	line[40] = 0;
-
-	printf("\033[1;1H");
-
-	printf("\033[104m                                                \033[m \r\n");
-	printf("\033[104m                                                \033[m \r\n");
-
-	for (int scrIndex = 0x400; scrIndex <= 0x7E7; scrIndex+=40) {
-
-		memcpy(line, &c64_RAM[scrIndex], 40);
-		
-		c64_screenConv(line);
-
-		printf("\033[104m    \033[44m\033[94m%s\033[104m    \033[m           \r\n", line);
-	}
-
-	printf("\033[104m                                                \033[m \r\n");
-	printf("\033[104m                                                \033[m \r\n");
-}
-
-/*******************************************************************************
-* Convert C64 screen codes to ascii.
-*
-* Arguments:
-*	lineIn		- User input character
-*
-* Returns: Converted input.
-*******************************************************************************/
-static void c64_screenConv(U8 * lineIn) {
-
-	for (int bufIndex = 0; bufIndex < 40; bufIndex++) {
-		if (lineIn[bufIndex] == 0) {
-			lineIn[bufIndex] = '@';
-		
-		} else if (lineIn[bufIndex] < 27) {
-			/* Alphabet */
-			lineIn[bufIndex] = lineIn[bufIndex] + 0x40;
-
-		} else if (lineIn[bufIndex] < 32) {
-			/* [, �, ], Up arrow, Left arrow */
-			lineIn[bufIndex] = lineIn[bufIndex] + 0x40;
-		
-		} else if (lineIn[bufIndex] < 64) {
-			/* These symbols and numeric characters match */
-		
-		} else if (lineIn[bufIndex] == 0xA0) {
-			/* Rest TODO */
-			lineIn[bufIndex] = '#';
-
-		} else {
-			/* Rest TODO */
-			lineIn[bufIndex] = '^';
-		}
-	}
 }
 
 /*******************************************************************************

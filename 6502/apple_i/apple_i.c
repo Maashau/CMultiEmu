@@ -57,7 +57,7 @@ U8 apple_i_memory[U16_MAX];
 *******************************************************************************/
 void apple_i_init(Processor_65xx * pProcessor) {
 
-	Memory_areas memAreas;
+	Memory_areas mem;
 
 	loadFile(apple_i_memory, 0xE000, "./apple_i/roms/bin/intBasic.rom", mos65xx_BIN);
 	loadFile(apple_i_memory, 0xFF00, "./apple_i/roms/bin/wozmon.rom", mos65xx_BIN);
@@ -69,13 +69,13 @@ void apple_i_init(Processor_65xx * pProcessor) {
 	addROMArea(0xE000, 0xEFFF); // Integer Basic
 	addROMArea(0xFF00, 0xFFFF); // Monitor
 
-	memAreas.RAM = apple_i_memory;
-	memAreas.ROM = NULL;
-	memAreas.IO = NULL;
+	mem.RAM = apple_i_memory;
+	mem.ROM = NULL;
+	mem.IO = NULL;
 
 	mos65xx_init(
 		pProcessor,
-		&memAreas,
+		&mem,
 		apple_i_memRead,
 		apple_i_memWrite,
 		2,
@@ -149,7 +149,7 @@ U8 apple_i_memRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 		return 0;
 	}
 
-	return pProcessor->memAreas.RAM[address];
+	return pProcessor->mem.RAM[address];
 }
 
 /*******************************************************************************
@@ -163,7 +163,7 @@ U8 apple_i_memRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 *******************************************************************************/
 void apple_i_memWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value) {
 	if (!isROMAddress(address)) {
-		pProcessor->memAreas.RAM[address] = value;
+		pProcessor->mem.RAM[address] = value;
 	}
 }
 
