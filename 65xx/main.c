@@ -81,12 +81,10 @@ U8 readKeyboard(void);
 void screenClear(Processor_65xx * pProcessor);
 void screenRefresh(U8 * pMemory, unsigned int freq);
 
-void programSelector(Processor_65xx * pProcessor, Parameters * parameters, U8 * pMemory);
+void programSelector(Processor_65xx * pProcessor, Parameters * parameters);
 void programEnd(int selected_program, U8 * pMemory, Processor_65xx * pProcessor);
 
 U8 timePassed(struct timespec * oldTime, struct timespec * newTime, time_t timeToPass);
-
-U8 memory[MOS65xx_MEMSIZE];
 
 char lineBuf[512];
 int lineBufIndex = 0;
@@ -97,6 +95,8 @@ extern opCode_st * mos65xx__opCodes;
 
 extern FILE * tmpLog;
 
+void * pDevStruct;
+
 /*******************************************************************************
 * Handles loading and running the program.
 *
@@ -104,24 +104,28 @@ extern FILE * tmpLog;
 *******************************************************************************/
 int main(int argc, char * argv[]) {
 
-	Processor_65xx processor;
-	struct timespec startTime, endTime;
+	Processor_65xx processor = {0};
+	struct timespec startTime = {0}, endTime = {0};
 	time_t realizedSpeed;
 
-	struct timespec runTime, syncTime, refreshTime = {0}, kbScanTime = {0};
+	struct timespec runTime = {0}, syncTime, refreshTime = {0}, kbScanTime = {0};
 
 	Parameters * pCliArguments = handleCLIArguments(argc, argv);
 
-	programSelector(&processor, pCliArguments, memory);
+	programSelector(&processor, pCliArguments);
 
+#ifndef _WIN32
 	clock_gettime(CLOCK_REALTIME, &startTime);
+#endif
 
 	if (pCliArguments->selectedProgram == PRG_APPLE_I) {
 		apple_i_run(&processor);
 	} else if (pCliArguments->selectedProgram == PRG_C64) {
-		c64_run(&processor);
+		c64_run(pDevStruct);
 	} else {
+#ifndef _WIN32
 		term_conf();
+#endif
 
 		while (1) {
 
@@ -129,7 +133,9 @@ int main(int argc, char * argv[]) {
 			unsigned int frequency = 0;
 			mos65xx_addr oldPC = processor.reg.PC;
 
+#ifndef _WIN32
 			clock_gettime(CLOCK_REALTIME, &runTime);
+#endif
 
 			if (processor.cycles.currentOp != 0) {
 				/* Calculate elapsed ns. */
@@ -148,7 +154,7 @@ int main(int argc, char * argv[]) {
 
 			if (processor.reg.PC == oldPC) {
 
-				DRAW_TERM(screenRefresh(memory, frequency));
+				DRAW_TERM(screenRefresh(processor.pMem->RAM, frequency));
 
 				term_deConf();
 				printf("\033[m\n\n0x%04X: Infinite loop detected!\n\n", oldPC);
@@ -159,7 +165,7 @@ int main(int argc, char * argv[]) {
 			if (timePassed(&refreshTime, &runTime, REFRESH_RATE_NS)) {
 				/* Sync screen refreshing to 50 hz. */
 				refreshTime = runTime;
-				DRAW_TERM(screenRefresh(memory, frequency));
+				DRAW_TERM(screenRefresh(processor.pMem->RAM, frequency));
 			}
 
 			/* Read keyboard every 10 ms. */
@@ -184,11 +190,18 @@ int main(int argc, char * argv[]) {
 						printf(BACKSPACE);
 					}
 				} else if (pressedKey == 0x09) { // TAB pressed (reset).
-					Memory_areas mem;
-					mem.RAM = memory;
-					mem.ROM = NULL;
-					mem.IO = NULL;
-					mos65xx_init(&processor, &mem, fnMemRead, fnMemWrite, pCliArguments->debugLogging, pCliArguments);
+					
+					if (processor.pMem != NULL) {
+						free(processor.pMem->IO);
+						free(processor.pMem->RAM);
+						free(processor.pMem->ROM);
+					}
+
+					U8 * pRAM = malloc(U16_MAX);
+					processor.pMem->RAM = pRAM;
+					processor.pMem->ROM = NULL;
+					processor.pMem->IO = NULL;
+					mos65xx_init(&processor, processor.pMem, fnMemRead, fnMemWrite, pCliArguments->debugLogging, pCliArguments);
 					DRAW_TERM(screenClear(&processor));
 				}
 
@@ -200,17 +213,21 @@ int main(int argc, char * argv[]) {
 
 			if (!pCliArguments->noSpeedLimit) {
 				/* Sync to 1 Mhz. */
+#ifndef _WIN32
 				do {
 
 					clock_gettime(CLOCK_REALTIME, &syncTime);
 
 				} while (!timePassed(&runTime, &syncTime, (pCliArguments->slowDown ? pCliArguments->slowDown * (pCliArguments->fasterSlowDown ? 1 : 1000) : processor.cycles.currentOp) * TICK_NS));
+#endif
 			}
 		}
 	}
+#ifndef _WIN32
 	clock_gettime(CLOCK_REALTIME, &endTime);
+#endif
 
-	programEnd(pCliArguments->selectedProgram, memory, &processor);
+	programEnd(pCliArguments->selectedProgram, processor.pMem->RAM, &processor);
 
 	time_t secsPassed, nsecsPassed = 0;
 
@@ -252,14 +269,14 @@ int main(int argc, char * argv[]) {
 *******************************************************************************/
 U8 fnMemRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 	if (((Parameters *)pProcessor->pUtil)->selectedProgram == PRG_APPLE_I && address == 0xD010) {
-		pProcessor->mem.RAM[0xD011] = 0;
+		pProcessor->pMem->RAM[0xD011] = 0;
 	}
 
 	if (!isROMAddress(address) && !isRAMAddress(address)) {
 		return 0;
 	}
 
-	return pProcessor->mem.RAM[address];
+	return pProcessor->pMem->RAM[address];
 }
 
 /*******************************************************************************
@@ -273,7 +290,7 @@ U8 fnMemRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 *******************************************************************************/
 void fnMemWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value) {
 	if (!isROMAddress(address)) {
-		pProcessor->mem.RAM[address] = value;
+		pProcessor->pMem->RAM[address] = value;
 	}
 }
 
@@ -359,58 +376,61 @@ void screenRefresh(U8 * pMemory, unsigned int frequency) {
 *	pMemory				- Pointer to the memory buffer.
 *
 *******************************************************************************/
-void programSelector(Processor_65xx * pProcessor, Parameters * parameters, U8 * pMemory) {
+void programSelector(Processor_65xx * pProcessor, Parameters * parameters) {
 
-	if (parameters->selectedProgram == PRG_ASSEMBLE) {
-		//mos65xx_assemble("./prg/asm/32bitdiv.asm", pMemory);
-		exit(0);
-	} else if (parameters->selectedProgram == PRG_STORE_TO_MEM) { // write values to memory.
-		loadFile(pMemory, 0xFE00, "./prg/bin/memWrite.rom", mos65xx_BIN);
-		addRAMArea(0x0000, 0xFFFF); // System & User space
-	} else if (parameters->selectedProgram == PRG_CLEAR_MEM) { // Clears X amount of memory from memory address (100), Y
-		loadFile(pMemory, 0xFE00, "./prg/bin/memClear.rom", mos65xx_BIN);
-		addRAMArea(0x0000, 0xFFFF); // System & User space
-	} else if (parameters->selectedProgram == PRG_WEEKDAY) { // Day of the week. Y = year, X = month, AC = day
-		loadFile(pMemory, 0xFE00, "./prg/bin/weekday.rom", mos65xx_BIN);
-		addRAMArea(0x0000, 0xFFFF); // System & User space
-	} else if (parameters->selectedProgram == PRG_KEYBOARD) {
-		loadFile(pMemory, 0xFE00, "./prg/bin/kbTest.rom", mos65xx_BIN);
-		addRAMArea(0x0000, 0xFFFF); // System & User space
-	} else if (parameters->selectedProgram == PRG_BLINK) {
-		loadFile(pMemory, 0xFE00, "./prg/bin/blink.rom", mos65xx_BIN);
-		addRAMArea(0x0000, 0xFFFF); // System & User space
-	} else if (parameters->selectedProgram == PRG_NUMQUERY) {
-		loadFile(pMemory, 0xFE00, "./prg/bin/numQuery.rom", mos65xx_BIN);
-		addRAMArea(0x0000, 0xFFFF); // System & User space
-	} else if (parameters->selectedProgram == PRG_PRINT) {
-		loadFile(pMemory, 0xFE00, "./prg/bin/print.rom", mos65xx_BIN);
-		addRAMArea(0x0000, 0xFFFF); // System & User space
-	} else if (parameters->selectedProgram == PRG_APPLE_I) {
-		apple_i_init(pProcessor);
-	} else if (parameters->selectedProgram == PRG_C64) {
-		c64_init(pProcessor);
-	} else if (parameters->selectedProgram == PRG_OPCODETEST) {
-		loadFile(pMemory, 0x0000, "./prg/test/6502_functional_test.bin", mos65xx_BIN);
-		addRAMArea(0x0000, 0xFFFF); // System & User space
-	}
 
 	if (parameters->selectedProgram != PRG_APPLE_I
 	&&	parameters->selectedProgram != PRG_C64
 	) {
-		Memory_areas mem;
+		U8 *  pMemory = malloc(U16_MAX);
 
-		mem.RAM = pMemory;
-		mem.ROM = NULL;
-		mem.IO = NULL;
+		if (parameters->selectedProgram == PRG_ASSEMBLE) {
+			//mos65xx_assemble("./prg/asm/32bitdiv.asm", pMemory);
+			exit(0);
+		} else if (parameters->selectedProgram == PRG_STORE_TO_MEM) { // write values to memory.
+			loadFile(pMemory, 0xFE00, "./prg/bin/memWrite.rom", mos65xx_BIN);
+			addRAMArea(0x0000, 0xFFFF); // System & User space
+		} else if (parameters->selectedProgram == PRG_CLEAR_MEM) { // Clears X amount of memory from memory address (100), Y
+			loadFile(pMemory, 0xFE00, "./prg/bin/memClear.rom", mos65xx_BIN);
+			addRAMArea(0x0000, 0xFFFF); // System & User space
+		} else if (parameters->selectedProgram == PRG_WEEKDAY) { // Day of the week. Y = year, X = month, AC = day
+			loadFile(pMemory, 0xFE00, "./prg/bin/weekday.rom", mos65xx_BIN);
+			addRAMArea(0x0000, 0xFFFF); // System & User space
+		} else if (parameters->selectedProgram == PRG_KEYBOARD) {
+			loadFile(pMemory, 0xFE00, "./prg/bin/kbTest.rom", mos65xx_BIN);
+			addRAMArea(0x0000, 0xFFFF); // System & User space
+		} else if (parameters->selectedProgram == PRG_BLINK) {
+			loadFile(pMemory, 0xFE00, "./prg/bin/blink.rom", mos65xx_BIN);
+			addRAMArea(0x0000, 0xFFFF); // System & User space
+		} else if (parameters->selectedProgram == PRG_NUMQUERY) {
+			loadFile(pMemory, 0xFE00, "./prg/bin/numQuery.rom", mos65xx_BIN);
+			addRAMArea(0x0000, 0xFFFF); // System & User space
+		} else if (parameters->selectedProgram == PRG_PRINT) {
+			loadFile(pMemory, 0xFE00, "./prg/bin/print.rom", mos65xx_BIN);
+			addRAMArea(0x0000, 0xFFFF); // System & User space
+		} else if (parameters->selectedProgram == PRG_OPCODETEST) {
+			loadFile(pMemory, 0x0000, "./prg/test/6502_functional_test.bin", mos65xx_BIN);
+			addRAMArea(0x0000, 0xFFFF); // System & User space
+		}
 
-		mos65xx_init(pProcessor, &mem, fnMemRead, fnMemWrite, parameters->debugLogging, parameters);
+		Memory_areas * pMem = calloc(1, sizeof(Memory_areas));
+
+		pMem->RAM = pMemory;
+		pMem->ROM = NULL;
+		pMem->IO = NULL;
+
+		mos65xx_init(pProcessor, pMem, fnMemRead, fnMemWrite, parameters->debugLogging, parameters);
 
 		screenClear(pProcessor);
 
 		if (parameters->selectedProgram == PRG_OPCODETEST) {
 			pProcessor->reg.PC = 0x400;
 		}
-	}
+	} else if (parameters->selectedProgram == PRG_APPLE_I) {
+		apple_i_init(pProcessor);
+	} else if (parameters->selectedProgram == PRG_C64) {
+		pDevStruct = c64_init(pProcessor);
+	} 
 
 }
 
@@ -488,7 +508,7 @@ U8 timePassed(struct timespec * pOldTime, struct timespec * pNewTime, time_t tim
 *******************************************************************************/
 Parameters * handleCLIArguments(int argc, char * argv[]) {
 
-	Parameters * pCLIArgs = calloc(sizeof(Parameters), 1);
+	Parameters * pCLIArgs = calloc(1, sizeof(Parameters));
 	char * currArg = argv[1];
 
 	/* First argument must be program index number */

@@ -42,7 +42,7 @@ typedef struct Processor_65xx_st {
 	mos65xx_memWrite	fnMemWrite;
 	processor_cycles_st	cycles;
 	size_t				totOperations;
-	Memory_areas		mem;
+	Memory_areas *		pMem;
 	void *				pUtil;
 	U8					lastOp;
 	U8					interrupt;
@@ -55,6 +55,11 @@ typedef enum {
 	mos65xx_HEX,
 	mos65xx_ASM
 } mos65xx_fileType;
+
+typedef struct {
+	mos65xx_addr startAddr;
+	mos65xx_addr endAddr;
+} address_range;
 
 enum {
 	SR_FLAG_C		= (1 << 0),

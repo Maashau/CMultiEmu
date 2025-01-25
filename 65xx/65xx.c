@@ -14,17 +14,10 @@
 
 #include "65xx_opcList.c"
 
-typedef struct {
-	mos65xx_addr startAddr;
-	mos65xx_addr endAddr;
-} address_range;
-
 U8 ROMAddrRangeCount;
 address_range ROMAddrList[0xFF];
 U8 RAMAddrRangeCount;
 address_range RAMAddrList[0xFF];
-U8 IOAddrRangeCount;
-address_range IOAddrList[0xFF];
 
 U8 opLogging;
 
@@ -56,9 +49,7 @@ void mos65xx_init(
 
 	memset(pProcessor, 0, sizeof(Processor_65xx));
 
-	pProcessor->mem.ROM = pMemory->ROM;
-	pProcessor->mem.RAM = pMemory->RAM;
-	pProcessor->mem.IO = pMemory->IO;
+	pProcessor->pMem = pMemory;
 	pProcessor->fnMemRead = fnMemRead;
 	pProcessor->fnMemWrite = fnMemWrite;
 	pProcessor->debugLevel = debugLevel;
@@ -212,47 +203,6 @@ U8 isRAMAddress(mos65xx_addr address) {
 	for (int areaIdx = 0; areaIdx < RAMAddrRangeCount; areaIdx++) {
 		if (RAMAddrList[areaIdx].startAddr <= address
 		&&	RAMAddrList[areaIdx].endAddr >= address
-		) {
-			return 1;
-		}
-	}
-
-	return 0;
-}
-
-/*******************************************************************************
-* Mark address range as IO.
-*
-* Arguments:
-*	startAddr	- Starting address of the RAM region
-*	endAddr		- Ending address of the RAM region
-*
-* Returns: -
-*******************************************************************************/
-void addIOArea(mos65xx_addr startAddr, mos65xx_addr endAddr) {
-	if (startAddr > endAddr) {
-		printf("\n\nInvalid IO area range (0x%04x - 0x%04x)...\n\n", startAddr, endAddr);
-		exit(1);
-	}
-
-	IOAddrList[IOAddrRangeCount].startAddr = startAddr;
-	IOAddrList[IOAddrRangeCount].endAddr = endAddr;
-
-	IOAddrRangeCount++;
-}
-
-/*******************************************************************************
-* Check if given address is on IO region.
-*
-* Arguments:
-*	address		- Address to be checked
-*
-* Returns: 1 if IO, otherwise 0
-*******************************************************************************/
-U8 isIOAddress(mos65xx_addr address) {
-	for (int areaIdx = 0; areaIdx < IOAddrRangeCount; areaIdx++) {
-		if (IOAddrList[areaIdx].startAddr <= address
-		&&	IOAddrList[areaIdx].endAddr >= address
 		) {
 			return 1;
 		}

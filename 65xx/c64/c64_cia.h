@@ -70,8 +70,7 @@ typedef enum {
 /*******************************************************************************
 * Functions
 *******************************************************************************/
-void c64_ciaInit(Processor_65xx * pProcessor);
-U8 c64_ciaCheckIrq(void);
-void c64_ciaTick(Processor_65xx * pProcessor, U8 tickAdvance);
-U8 c64_ciaRead(Processor_65xx * pProcessor, mos65xx_addr address);
+void c64_ciaInit(C64_t * pC64);
+void c64_ciaTick(C64_t * pC64);
+U8 c64_ciaRead(C64_t * pC64, mos65xx_addr address);
 void c64_ciaWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value);

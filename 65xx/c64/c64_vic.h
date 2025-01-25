@@ -119,8 +119,7 @@ typedef enum {
 /*******************************************************************************
 * Functions
 *******************************************************************************/
-void c64_vicInit(Processor_65xx * pProcessor);
-U8 c64_vicCheckIrq(void);
-void c64_vicTick(Processor_65xx * pProcessor, U8 tickAdvance);
+void c64_vicInit(C64_t * pC64);
+void c64_vicTick(C64_t * pC64);
 U8 c64_vicRead(Processor_65xx * pProcessor, mos65xx_addr address);
 void c64_vicWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value);

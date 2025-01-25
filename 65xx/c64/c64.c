@@ -5,18 +5,21 @@
 *******************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <string.h>
 #include <time.h>
 // Non-blocking fgetc()
 #include <fcntl.h>
 #include <SDL2/SDL.h>
 
-#include <65xx.h>
+#include "../65xx.h"
 
 #include "c64.h"
 #include "c64_peripherals.h"
 #include "c64_vic.h"
+#include "c64_io.h"
 
 #define TRUE	1U
 #define FALSE	0U
@@ -42,22 +45,13 @@
 #define DATA_DIR_REG 	((mos65xx_addr)0)
 #define PORT_REG 		((mos65xx_addr)1)
 
-#define loRamEnabled(_pProcessor) (!((_pProcessor->mem.RAM[PORT_REG] & 3) == 3)) // Only ROM when 0b...11
-#define midRamEnabled(_pProcessor) ((_pProcessor->mem.RAM[PORT_REG] ^ 3) == 3)
-#define hiRamEnabled(_pProcessor) (!(_pProcessor->mem.RAM[PORT_REG] & 2)) // Only ROM when 0b...1x
+#define loRamEnabled(_pProcessor) (!((_pProcessor->pMem->RAM[PORT_REG] & 3) == 3)) // Only ROM when 0b...11
+#define midRamEnabled(_pProcessor) ((_pProcessor->pMem->RAM[PORT_REG] ^ 3) == 3)
+#define hiRamEnabled(_pProcessor) (!(_pProcessor->pMem->RAM[PORT_REG] & 2)) // Only ROM when 0b...1x
 
-#define charRomEnabled(_pProcessor) (!(_pProcessor->mem.RAM[PORT_REG] & CHAREN_BIT) && !midRamEnabled(_pProcessor))
-#define ioAreaVisible(_pProcessor) ((_pProcessor->mem.RAM[PORT_REG] & CHAREN_BIT) && !midRamEnabled(_pProcessor))
+#define charRomEnabled(_pProcessor) (!(_pProcessor->pMem->RAM[PORT_REG] & CHAREN_BIT) && !midRamEnabled(_pProcessor))
+#define ioAreaVisible(_pProcessor) ((_pProcessor->pMem->RAM[PORT_REG] & CHAREN_BIT) && !midRamEnabled(_pProcessor))
 
-#define isRAM(_pProcessor, _address) (						\
-	isInRange(_address, C64BASIC_START, C64BASIC_END) 		\
-	? 	(loRamEnabled(_pProcessor) ? TRUE : FALSE) 			\
-	:	isInRange(_address, C64CHAR_START, C64CHAR_END) 	\
-		?	(midRamEnabled(_pProcessor) ? TRUE : FALSE)		\
-		:	notSmaller(_address, C64KERNAL_START)			\
-			?	(hiRamEnabled(_pProcessor) ? TRUE : FALSE)		\
-			:	FALSE										\
-)
 
 #define isIO(_pProcessor, _address) \
 	isInRange(_address, C64CHAR_START, C64CHAR_END) ? ioAreaVisible(_pProcessor) : FALSE
@@ -72,12 +66,15 @@
 static U8 c64_memRead(Processor_65xx * pProcessor, mos65xx_addr address);
 static void c64_memWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value);
 
-static U8 c64_scanKbd(void);
-
 static U8 c64_timePassed(struct timespec * pOldTime, struct timespec * pNewTime, time_t timeToPass);
-static U8 c64_readKeyboard(void);
 
-U8 clearKeys = 0;
+static U8 c64_isRam(Processor_65xx * pProcessor, mos65xx_addr address);
+
+void addIOArea(mos65xx_addr startAddr, mos65xx_addr endAddr);
+U8 isIOAddress(mos65xx_addr address);
+
+U8 IOAddrRangeCount;
+address_range IOAddrList[0xFF];
 
 enum {
 	OP_RAM,
@@ -90,54 +87,61 @@ mos65xx_addr lastAddr = 0;
 
 extern FILE * tmpLog;
 
-U8 c64_keyBuffer[8];
-
-#include "c64_keyMap.c"
-
 /*******************************************************************************
 * Initialize Commodore 64 emulator.
 *
 * Arguments:
 *	pProcessor - Pointer to 65xx processor struct.
 *
-* Returns: -
+* Returns: Pointer to C64 struct.
 *******************************************************************************/
-void c64_init(Processor_65xx * pProcessor) {
+void * c64_init(Processor_65xx * pProcessor) {
 
-	Memory_areas mem;
+	Memory_areas *	pMem		= calloc(1, sizeof(Memory_areas));
+	C64_t *			pC64		= calloc(1, sizeof(C64_t));
+	RGB_t *			pScreenBuf	= malloc(C64_BORDER_W * C64_BORDER_H * sizeof(RGB_t));
 
-	mem.RAM = malloc(U16_MAX);
-	mem.ROM = malloc(U16_MAX);
-	mem.IO = malloc(U16_MAX);
+	pMem->RAM = malloc(U16_MAX);
+	pMem->ROM = malloc(U16_MAX);
+	pMem->IO = malloc(U16_MAX);
 
 	addRAMArea(0x0000, 0xFFFF);
 
 	addROMArea(C64BASIC_START, C64BASIC_END); // Basic
-	loadFile(mem.ROM, C64BASIC_START, "./c64/roms/bin/c64Basic.rom", mos65xx_BIN);
+	loadFile(pMem->ROM, C64BASIC_START, "./c64/roms/c64Basic.rom", mos65xx_BIN);
 
 	addROMArea(C64CHAR_START, C64CHAR_END); // CHAR rom
-	loadFile(mem.ROM, C64CHAR_START, "./c64/roms/bin/c64Char.rom", mos65xx_BIN);
+	loadFile(pMem->ROM, C64CHAR_START, "./c64/roms/c64Char.rom", mos65xx_BIN);
 
 	addROMArea(C64KERNAL_START, C64KERNAL_END); // Kernal
-	loadFile(mem.ROM, C64KERNAL_START, "./c64/roms/bin/c64Kernal.rom", mos65xx_BIN);
+	loadFile(pMem->ROM, C64KERNAL_START, "./c64/roms/c64Kernal.rom", mos65xx_BIN);
 
 	addIOArea(C64CHAR_START, C64CHAR_END);
 	
 
-	mem.RAM[DATA_DIR_REG] = 0x2F; // Default = 0b0010 1111
-	mem.RAM[PORT_REG] = 0x07;// Default = 0b0000 0111
+	//addROMArea(C64CARTLO_START, C64CARTLO_END); // Cartridge rom
+	//loadFile(pMem->ROM, C64CARTLO_START, "./c64/roms/CommodoreDiagRev410.bin", mos65xx_BIN);
+
+
+	pMem->RAM[DATA_DIR_REG] = 0x2F; // Default = 0b0010 1111
+	pMem->RAM[PORT_REG] = 0x07;// Default = 0b0000 0111
 
 	mos65xx_init(
 		pProcessor,
-		&mem,
+		pMem,
 		c64_memRead,
 		c64_memWrite,
-		2,
-		NULL
+		0,
+		pC64
 	);
 
+	pC64->pProcessor = pProcessor;
+	pC64->pScreenBuf = pScreenBuf;
+
 	/* Set peripheral default values. */
-	c64_periphInit(pProcessor);
+	c64_periphInit(pC64);
+
+	return pC64;
 }
 
 /*******************************************************************************
@@ -148,85 +152,68 @@ void c64_init(Processor_65xx * pProcessor) {
 *
 * Returns: -
 *******************************************************************************/
-void c64_run(Processor_65xx * pProcessor) {
+void c64_run(void * pDevice) {
 
+	C64_t * pC64 = (C64_t *)pDevice;
 	struct timespec runTime, syncTime;
-	U32 kbScan = 0;
 	mos65xx_addr oldPC = 0;
 
 	SDL_Event nextEvent;
 
-	pProcessor->event = &nextEvent;
+	pC64->pProcessor->event = &nextEvent;
 
-#if 1
-	term_conf();
-#endif
+	pC64->pSdlSema = SDL_CreateSemaphore(0);
+	SDL_CreateThread(sdlThread, "DrawFn", pC64);
 
 	while (1) {
 
-		oldPC = pProcessor->reg.PC;
-#if 1
+		oldPC = pC64->pProcessor->reg.PC;
+
+#ifndef _WIN32
 		clock_gettime(CLOCK_REALTIME, &runTime);
 #endif	
-		if (c64_periphCheckIrq()) {
-			/* PIN interrupt occured. */
-			mos65xx_irqEnter(pProcessor);
-		}
-		mos65xx_handleOp(pProcessor);
 
-		if (pProcessor->cycles.currentOp == 0) {
+		if (pC64->irqActive) {
+			/* PIN interrupt occured. */
+			mos65xx_irqEnter(pC64->pProcessor);
+		}
+		mos65xx_handleOp(pC64->pProcessor);
+
+		if (pC64->pProcessor->cycles.currentOp == 0) {
 			term_deConf();
 			printf("\033[m\n\n0x%04X: Invalid opcode!\n\n", oldPC);
 			break;
 		}
-#if 1
-		if (lastOpMemType == OP_RAM) {
-			DBG_LOG(pProcessor, fprintf(tmpLog, " | RAM %c($%04X)", lastOpType, lastAddr));
-		} else if (lastOpMemType == OP_ROM) {
-			DBG_LOG(pProcessor, fprintf(tmpLog, " | ROM %c($%04X)", lastOpType, lastAddr));
-		} else if (lastOpMemType == OP_IO) {
-			DBG_LOG(pProcessor, fprintf(tmpLog, " | IO  %c($%04X)", lastOpType, lastAddr));
+
+		if (pC64->pProcessor->lastOp == 0x40){ /* RTI */
+			mos65xx_irqLeave(pC64->pProcessor);
 		}
-#endif
-		if (pProcessor->lastOp == 0x40){ /* RTI */
-			mos65xx_irqLeave(pProcessor);
-		}
-#if 1
-		if (pProcessor->reg.PC == oldPC) {
+		
+		if (pC64->pProcessor->reg.PC == oldPC) {
 
 			term_deConf();
 			printf("\033[m\n\n0x%04X: Infinite loop detected!\n\n", oldPC);
 			break;
 		}
-#if 1
-		kbScan += pProcessor->cycles.currentOp;
-		if (kbScan >= 10000) {
-			if (c64_scanKbd()) {
-				term_deConf();
-				break;
-			}
-			kbScan = 0;
-		}
-#endif
 
+#ifndef _WIN32
 		/* Sync to 1 Mhz. */
 		do {
 
 			clock_gettime(CLOCK_REALTIME, &syncTime);
 
-		} while (!c64_timePassed(&runTime, &syncTime, pProcessor->cycles.currentOp * TICK_NS));
+		} while (!c64_timePassed(&runTime, &syncTime, pC64->pProcessor->cycles.currentOp * TICK_NS));
 #endif
 		
-		c64_periphTick(pProcessor, pProcessor->cycles.currentOp);
+		c64_periphTick(pC64);
 
-		pProcessor->totOperations++;
+		pC64->pProcessor->totOperations++;
 
 		if (nextEvent.type == SDL_QUIT) {
 			break;
 		}
 		nextEvent.type = 0;
 	}
-	term_deConf();
 }
 
 /*******************************************************************************
@@ -241,19 +228,20 @@ static U8 c64_memRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 
 	extern U8 opLogging;
 	U8 memVal = 0;
+	U8 isRomAddr = isROMAddress(address);
 
 	if (!opLogging) {
 		lastOpType = 'R';
 	}
 
-	if (!isROMAddress(address) || isRAM(pProcessor, address)) {
-		memVal = pProcessor->mem.RAM[address];
+	if (!isRomAddr || c64_isRam(pProcessor, address)) {
+		memVal = pProcessor->pMem->RAM[address];
 		lastOpMemType = OP_RAM;
 	} else if (isIO(pProcessor, address)) {
-		memVal = c64_periphRead(pProcessor, address);
+		memVal = c64_periphRead((C64_t *)pProcessor->pUtil, address);
 		lastOpMemType = OP_IO;
 	} else {
-		memVal = pProcessor->mem.ROM[address];
+		memVal = pProcessor->pMem->ROM[address];
 		lastOpMemType = OP_ROM;
 	}
 
@@ -283,101 +271,11 @@ static void c64_memWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 v
 		c64_periphWrite(pProcessor, address, value);
 		lastOpMemType = OP_IO;
 	} else {
-		pProcessor->mem.RAM[address] = value;
+		pProcessor->pMem->RAM[address] = value;
 		lastOpMemType = OP_RAM;
 	}
 
 	lastAddr = address;
-}
-
-/*******************************************************************************
-* Read and filter keyboard input.
-*
-* Arguments:
-*	pProcessor	- 65xx processor struct.
-*
-* Returns: 1 if esc was pressed, otherwise 0
-*******************************************************************************/
-static U8 c64_scanKbd(void) {
-
-	static U8 pressedKey = 0;
-
-	pressedKey = c64_readKeyboard();
-	
-	if (clearKeys) {
-		memset(c64_keyBuffer, 0, sizeof(c64_keyBuffer));
-		
-		clearKeys = 0;
-	}
-
-	if (pressedKey == 0x1B) { // ESC detected.
-		printf(BACKSPACE);
-		pressedKey = c64_readKeyboard();
-
-		if (pressedKey == 0xFF || pressedKey == 0x1B) {  // ESC key pressed, quit.
-
-			term_deConf();
-
-			printf("\n\nESC key hit.\n\n");
-
-			return 1;
-		}
-	} else if (pressedKey != 0xFF) {
-
-		U8 keyColumn;
-		U8 keyRow;
-		U16 convKey = c64_keyMap[pressedKey];
-
-		if ((convKey & C64_KB_LSH) == C64_KB_LSH) {
-			c64_keyBuffer[1] = C64_KB_LSH & 0xFF;
-
-			if (convKey & ~C64_KB_LSH & 0xFF00) {
-				convKey &= ~(C64_KB_LSH & 0xFF00); 
-			}
-			if (convKey & ~C64_KB_LSH & 0xFF) {
-				convKey &= ~(C64_KB_LSH & 0xFF); 
-			}
-		}
-
-		keyRow = convKey & 0xFF;
-
-		convKey = convKey >> 8;
-
-		for (
-			keyColumn = 0;
-			(convKey & 1) == 0 && convKey != 0;
-			keyColumn++
-		) {
-			convKey = convKey >> 1;
-		}
-
-		c64_keyBuffer[keyColumn] = keyRow;
-	}
-
-	return 0;
-}
-
-/*******************************************************************************
-* Read one byte from the stdin without blocking.
-*
-* Arguments:
-*	none
-*
-* Returns: Byte representing the key pressed on the keyboard.
-*******************************************************************************/
-static U8 c64_readKeyboard(void) {
-	U8 key;
-
-	key = fgetc(stdin);
-/*
-	if (key != 0xFF) {
-		if (key == '\r' || key == 0x7F) {
-			printf("\b \b");
-		}
-		printf("\b \b");
-	}
-*/
-	return key;
 }
 
 /*******************************************************************************
@@ -410,4 +308,68 @@ static U8 c64_timePassed(struct timespec * pOldTime, struct timespec * pNewTime,
 	}
 
 	return passed;
+}
+
+static U8 c64_isRam(Processor_65xx * pProcessor, mos65xx_addr address){
+
+	if (isInRange(address, C64BASIC_START, C64BASIC_END)
+	&&	loRamEnabled(pProcessor)
+	) {
+		return TRUE;
+
+	} else if (
+		isInRange(address, C64CHAR_START, C64CHAR_END)
+	&&	midRamEnabled(pProcessor)
+	) {
+		return TRUE;
+
+	} else if (
+		notSmaller(address, C64KERNAL_START)
+	&&	hiRamEnabled(pProcessor)
+	) {
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+/*******************************************************************************
+* Mark address range as IO.
+*
+* Arguments:
+*	startAddr	- Starting address of the RAM region
+*	endAddr		- Ending address of the RAM region
+*
+* Returns: -
+*******************************************************************************/
+void addIOArea(mos65xx_addr startAddr, mos65xx_addr endAddr) {
+	if (startAddr > endAddr) {
+		printf("\n\nInvalid IO area range (0x%04x - 0x%04x)...\n\n", startAddr, endAddr);
+		exit(1);
+	}
+
+	IOAddrList[IOAddrRangeCount].startAddr = startAddr;
+	IOAddrList[IOAddrRangeCount].endAddr = endAddr;
+
+	IOAddrRangeCount++;
+}
+
+/*******************************************************************************
+* Check if given address is on IO region.
+*
+* Arguments:
+*	address		- Address to be checked
+*
+* Returns: 1 if IO, otherwise 0
+*******************************************************************************/
+U8 isIOAddress(mos65xx_addr address) {
+	for (int areaIdx = 0; areaIdx < IOAddrRangeCount; areaIdx++) {
+		if (IOAddrList[areaIdx].startAddr <= address
+		&&	IOAddrList[areaIdx].endAddr >= address
+		) {
+			return 1;
+		}
+	}
+
+	return 0;
 }

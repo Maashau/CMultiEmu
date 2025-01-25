@@ -36,7 +36,7 @@ U16 c64_keyMap[] = {
     0, //	ENQ
     0, //	ACK
     0, //	BEL
-    0, //	BS
+    C64_KB_DEL, //	BS
     C64_KB_RUN, //	TAB
     0, //	LF
     0, //	VT
@@ -61,15 +61,15 @@ U16 c64_keyMap[] = {
     0, //	RS
     0, //	US
     C64_KB_SPC, //	SPACE
-    C64_KB_LSH | C64_KB_1, //	EXCLAMAION_MARK
-    C64_KB_LSH | C64_KB_2, //	QUOTATION_MARK_DOUBLE
-    C64_KB_LSH | C64_KB_3, //	HASHTAG
-    C64_KB_LSH | C64_KB_4, //	SING_DOLLAR
-    C64_KB_LSH | C64_KB_5, //	PRECENT
-    C64_KB_LSH | C64_KB_6, //	AMPERSANT
-    C64_KB_LSH | C64_KB_7, //	QUOTATION_MARK_SINGLE
-    C64_KB_LSH | C64_KB_8, //	PARENTHESES_OPEN
-    C64_KB_LSH | C64_KB_9, //	PARENTHESES_CLOSE
+    0,//C64_KB_LSH | C64_KB_1, //	EXCLAMAION_MARK
+    0,//C64_KB_LSH | C64_KB_2, //	QUOTATION_MARK_DOUBLE
+    0,//C64_KB_LSH | C64_KB_3, //	HASHTAG
+    0,//C64_KB_LSH | C64_KB_4, //	SING_DOLLAR
+    0,//C64_KB_LSH | C64_KB_5, //	PRECENT
+    0,//C64_KB_LSH | C64_KB_6, //	AMPERSANT
+    0,//C64_KB_LSH | C64_KB_7, //	QUOTATION_MARK_SINGLE
+    0,//C64_KB_LSH | C64_KB_8, //	PARENTHESES_OPEN
+    0,//C64_KB_LSH | C64_KB_9, //	PARENTHESES_CLOSE
     C64_KB_AST, //	ASTERISK
     C64_KB_PLS, //	PLUS
     C64_KB_COMMA, //	COMMA
@@ -88,10 +88,10 @@ U16 c64_keyMap[] = {
     C64_KB_9, //	NUMBER_9
     C64_KB_COL, //	COLON
     C64_KB_SCO, //	COLON_SEMI
-    C64_KB_LSH | C64_KB_COMMA, //	LESS_THAN
+    0, //C64_KB_LSH | C64_KB_COMMA, //	LESS_THAN
     C64_KB_EQ, //	EQUAL_TO
-    C64_KB_LSH | C64_KB_DOT, //	GREATER_THAN
-    C64_KB_LSH | C64_KB_SLASH, //	QUESTION_MARK
+    0, //C64_KB_LSH | C64_KB_DOT, //	GREATER_THAN
+    0, //C64_KB_LSH | C64_KB_SLASH, //	QUESTION_MARK
     C64_KB_AT, //	SING_AT
     C64_KB_A, //	A_UPPER
     C64_KB_B, //	B_UPPER
@@ -156,14 +156,15 @@ U16 c64_keyMap[] = {
     0, //	BRACKET_CURLY_CLOSE
     0, //	TILDE
     C64_KB_DEL, //	DEL
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
+/* Modifiers and specials */
+    C64_KB_CL,
+    C64_KB_CU,
+    C64_KB_LSH | C64_KB_CL,
+    C64_KB_LSH | C64_KB_CU,
+    C64_KB_LSH,
+    C64_KB_RSH,
+    C64_KB_CTR,
+    C64_KB_COM,
     0,
     0,
     0,

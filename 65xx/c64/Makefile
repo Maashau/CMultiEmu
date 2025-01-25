@@ -7,7 +7,8 @@ OBJFILES=\
 $(OBJ)/c64.o\
 $(OBJ)/c64_peripherals.o\
 $(OBJ)/c64_vic.o\
-$(OBJ)/c64_cia.o
+$(OBJ)/c64_cia.o\
+$(OBJ)/c64_io.o
 
 all : $(LIB) $(OBJ) $(LIB)/c64.lib assemble
 

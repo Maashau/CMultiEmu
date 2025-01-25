@@ -6,9 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <65xx.h>
 // Non-blocking fgetc()
 #include <fcntl.h>
+
+#include "../65xx.h"
 
 #define term_conf()	fcntl(0, F_SETFL, O_NONBLOCK); system("/bin/stty raw")
 #define term_deConf() system("/bin/stty cooked");
@@ -57,7 +58,8 @@ U8 apple_i_memory[U16_MAX];
 *******************************************************************************/
 void apple_i_init(Processor_65xx * pProcessor) {
 
-	Memory_areas mem;
+	Memory_areas * pMem = calloc(1, sizeof(Memory_areas));
+	pMem->RAM = malloc(U16_MAX);
 
 	loadFile(apple_i_memory, 0xE000, "./apple_i/roms/bin/intBasic.rom", mos65xx_BIN);
 	loadFile(apple_i_memory, 0xFF00, "./apple_i/roms/bin/wozmon.rom", mos65xx_BIN);
@@ -69,13 +71,13 @@ void apple_i_init(Processor_65xx * pProcessor) {
 	addROMArea(0xE000, 0xEFFF); // Integer Basic
 	addROMArea(0xFF00, 0xFFFF); // Monitor
 
-	mem.RAM = apple_i_memory;
-	mem.ROM = NULL;
-	mem.IO = NULL;
+	pMem->RAM = apple_i_memory;
+	pMem->ROM = NULL;
+	pMem->IO = NULL;
 
 	mos65xx_init(
 		pProcessor,
-		&mem,
+		pMem,
 		apple_i_memRead,
 		apple_i_memWrite,
 		2,
@@ -95,12 +97,14 @@ void apple_i_run(Processor_65xx * pProcessor) {
 
 	struct timespec runTime, syncTime, kbScanTime = {0};
 	
-	term_conf();
+	//term_conf();
 
 	while (1) {
 		mos65xx_addr oldPC = pProcessor->reg.PC;
 
+#ifndef _WIN32
 		clock_gettime(CLOCK_REALTIME, &runTime);
+#endif
 
 		mos65xx_handleOp(pProcessor);
 
@@ -124,11 +128,13 @@ void apple_i_run(Processor_65xx * pProcessor) {
 		pProcessor->totOperations++;
 
 		/* Sync to 1 Mhz. */
+#ifndef _WIN32
 		do {
 
 			clock_gettime(CLOCK_REALTIME, &syncTime);
 
 		} while (!apple_i_timePassed(&runTime, &syncTime, pProcessor->cycles.currentOp * TICK_NS));
+#endif
 	}
 }
 
@@ -149,7 +155,7 @@ U8 apple_i_memRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 		return 0;
 	}
 
-	return pProcessor->mem.RAM[address];
+	return pProcessor->pMem->RAM[address];
 }
 
 /*******************************************************************************
@@ -163,7 +169,7 @@ U8 apple_i_memRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 *******************************************************************************/
 void apple_i_memWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value) {
 	if (!isROMAddress(address)) {
-		pProcessor->mem.RAM[address] = value;
+		pProcessor->pMem->RAM[address] = value;
 	}
 }
 
