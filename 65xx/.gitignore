@@ -10,3 +10,4 @@ test_65xx.out
 65xx_emu/x64
 65xx_emu/c64
 65xx_emu/SDL2.dll
+!sdl2/**
