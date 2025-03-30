@@ -73,7 +73,6 @@ void apple_i_init(Processor_65xx * pProcessor) {
 
 	pMem->RAM = apple_i_memory;
 	pMem->ROM = NULL;
-	pMem->IO = NULL;
 
 	mos65xx_init(
 		pProcessor,
@@ -95,16 +94,12 @@ void apple_i_init(Processor_65xx * pProcessor) {
 *******************************************************************************/
 void apple_i_run(Processor_65xx * pProcessor) {
 
-	struct timespec runTime, syncTime, kbScanTime = {0};
+	struct timespec runTime, kbScanTime = {0};
 	
 	//term_conf();
 
 	while (1) {
 		mos65xx_addr oldPC = pProcessor->reg.PC;
-
-#ifndef _WIN32
-		clock_gettime(CLOCK_REALTIME, &runTime);
-#endif
 
 		mos65xx_handleOp(pProcessor);
 
@@ -127,14 +122,7 @@ void apple_i_run(Processor_65xx * pProcessor) {
 
 		pProcessor->totOperations++;
 
-		/* Sync to 1 Mhz. */
-#ifndef _WIN32
-		do {
-
-			clock_gettime(CLOCK_REALTIME, &syncTime);
-
-		} while (!apple_i_timePassed(&runTime, &syncTime, pProcessor->cycles.currentOp * TICK_NS));
-#endif
+		/* TODO: Sync to 1 Mhz. */
 	}
 }
 

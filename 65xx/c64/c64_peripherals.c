@@ -4,6 +4,7 @@
 * Commodore 64 peripheral source file.
 *******************************************************************************/
 #include <stdio.h>
+#include <assert.h>
 
 #ifndef _WIN32
 #include <unistd.h>
@@ -68,7 +69,8 @@ U8 c64_periphRead(C64_t * pC64, mos65xx_addr address) {
 		retVal = c64_ciaRead(pC64, address);
 	}
 	else if (address >= 0xD800 && address <= 0xDBE7) {
-		retVal = pProcessor->pMem->IO[address];
+		retVal = pProcessor->pMem->RAM[address];
+		//assert(0);
 	}
 
 
@@ -92,6 +94,7 @@ void c64_periphWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value
 	} else if (address >= 0xDC00 && address <= 0xDD0F) {
 		c64_ciaWrite(pProcessor, address, value);
 	} else if (address >= 0xD800 && address <= 0xDBE7) {
-		pProcessor->pMem->IO[address] = value;
+		pProcessor->pMem->RAM[address] = value;
+		//assert(0);
 	}
 }

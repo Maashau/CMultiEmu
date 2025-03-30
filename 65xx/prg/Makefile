@@ -12,7 +12,8 @@ kbTest\
 memClear\
 memWrite\
 numQuery\
-print
+print\
+scheduler
 
 all : testPrgs
 
@@ -25,6 +26,7 @@ memClear : $(BINDIR)/memClear.rom
 memWrite : $(BINDIR)/memWrite.rom
 numQuery : $(BINDIR)/numQuery.rom
 print : $(BINDIR)/print.rom
+scheduler : $(BINDIR)/scheduler.rom
 
 $(BINDIR)/%.rom : $(ASMDIR)/%.asm
 	$(info )

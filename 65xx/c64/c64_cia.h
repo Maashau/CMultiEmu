@@ -33,39 +33,44 @@ enum {
 };
 
 typedef enum {
-	DC00_portAKbdColJStick2	= 0xDC00,
-	DC01_portBKbdRowJStick1	= 0xDC01,
-	DC02_portADataDir	= 0xDC02,
-	DC03_portBDataDir	= 0xDC03,
-	DC04_timerAValueLSB	= 0xDC04, // RW
-	DC05_timerAValueMSB	= 0xDC05, // RW
-	DC06_timerBValueLSB	= 0xDC06, // RW
-	DC07_timerBValueMSB	= 0xDC07, // RW
-	DC08_timeOfDayTenths	= 0xDC08, // BDC
-	DC09_timeOfDaySecs	= 0xDC09, // BDC
-	DC0A_timeOfDayMins	= 0xDC0A, // BDC
-	DC0B_timeOfDayHours	= 0xDC0B, // BDC
-	DC0C_serialShiftReg	= 0xDC0C,
-	DC0D_intCtrlStatusReg	= 0xDC0D,
-	DC0E_timerACtrl	= 0xDC0E,
-	DC0F_timerBCtrl	= 0xDC0F,
-	DD00_portASerial	= 0xDD00,
-	DD01_portBRS232	= 0xDD01,
-	DD02_portADataDir	= 0xDD02,
-	DD03_portBDataDir	= 0xDD03,
-	DD04_timerAValueLSB	= 0xDD04, // RW
-	DD05_timerAValueMSB	= 0xDD05, // RW
-	DD06_timerBValueLSB	= 0xDD06, // RW
-	DD07_timerBValueMSB	= 0xDD07, // RW
-	DD08_timeOfDayTenths	= 0xDD08, // BDC
-	DD09_timeOfDaySecs	= 0xDD09, // BDC
-	DD0A_timeOfDayMins	= 0xDD0A, // BDC
-	DD0B_timeOfDayHours	= 0xDD0B, // BDC
-	DD0C_serialShiftReg	= 0xDD0C,
-	DD0D_intCtrlStatusReg	= 0xDD0D,
-	DD0E_timerACtrl	= 0xDD0E,
-	DD0F_timerBCtrl	= 0xDD0F
-} Cia_t;
+	DC00_portAKbdColJStick2 = 0x00,
+	DC01_portBKbdRowJStick1 = 0x01,
+	DC02_portADataDir = 0x02,
+	DC03_portBDataDir = 0x03,
+	DC04_timerAValueLSB = 0x04, // RW
+	DC05_timerAValueMSB = 0x05, // RW
+	DC06_timerBValueLSB = 0x06, // RW
+	DC07_timerBValueMSB = 0x07, // RW
+	DC08_timeOfDayTenths = 0x08, // BDC
+	DC09_timeOfDaySecs = 0x09, // BDC
+	DC0A_timeOfDayMins = 0x0A, // BDC
+	DC0B_timeOfDayHours = 0x0B, // BDC
+	DC0C_serialShiftReg = 0x0C,
+	DC0D_intCtrlStatusReg = 0x0D,
+	DC0E_timerACtrl = 0x0E,
+	DC0F_timerBCtrl = 0x0F,
+	CIA1_COUNT
+} Cia1_t;
+
+typedef enum {
+	DD00_portASerial	= 0x00,
+	DD01_portBRS232	= 0x01,
+	DD02_portADataDir	= 0x02,
+	DD03_portBDataDir	= 0x03,
+	DD04_timerAValueLSB	= 0x04, // RW
+	DD05_timerAValueMSB	= 0x05, // RW
+	DD06_timerBValueLSB	= 0x06, // RW
+	DD07_timerBValueMSB	= 0x07, // RW
+	DD08_timeOfDayTenths	= 0x08, // BDC
+	DD09_timeOfDaySecs	= 0x09, // BDC
+	DD0A_timeOfDayMins	= 0x0A, // BDC
+	DD0B_timeOfDayHours	= 0x0B, // BDC
+	DD0C_serialShiftReg	= 0x0C,
+	DD0D_intCtrlStatusReg	= 0x0D,
+	DD0E_timerACtrl	= 0x0E,
+	DD0F_timerBCtrl	= 0x0F,
+	CIA2_COUNT
+} Cia2_t;
 
 /*******************************************************************************
 * Functions

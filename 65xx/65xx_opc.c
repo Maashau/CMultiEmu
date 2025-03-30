@@ -74,10 +74,10 @@ addrmFn addrm_functions[] = {
 /*******************************************************************************
 * Common private functions
 *******************************************************************************/
-void mos65xx_branch(Processor_65xx * pProcessor, U8 condition);
-U8 mos65xx_binAdd(Processor_65xx * pProcessor, U8 lValue, U8 rValue);
-U8 mos65xx_decAdd(Processor_65xx * pProcessor, U8 lValue, U8 rValue, I8 operator);
-void mos65xx_compare(Processor_65xx * pProcessor, U8 lValue, U8 rValue);
+static inline void mos65xx_branch(Processor_65xx * pProcessor, U8 condition);
+static inline U8 mos65xx_binAdd(Processor_65xx * pProcessor, U8 lValue, U8 rValue);
+static inline U8 mos65xx_decAdd(Processor_65xx * pProcessor, U8 lValue, U8 rValue, I8 operator);
+static inline void mos65xx_compare(Processor_65xx * pProcessor, U8 lValue, U8 rValue);
 
 
 void mos65xx_ILLNOP(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm);
@@ -94,6 +94,8 @@ void mos65xx_ADC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	mos65xx_addr address;
 	U16 oldPC = pProcessor->reg.PC;
 	U8 memValue = 0;
+
+	address = addrm_functions[addrm](pProcessor);
 
 	// TODO implement decimal mode (BCD)
 
@@ -124,8 +126,6 @@ void mos65xx_ADC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 		default:
 			pProcessor->cycles.currentOp = 0;
 	}
-
-	address = addrm_functions[addrm](pProcessor);
 
 	memValue = addrm_read8(pProcessor, address);
 
@@ -158,6 +158,8 @@ void mos65xx_AND(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	mos65xx_addr address;
 	mos65xx_addr oldPC = pProcessor->reg.PC;
 
+	address = addrm_functions[addrm](pProcessor);
+
 	switch (opCode) {
 		case 0x29: //immediate
 			break;
@@ -186,7 +188,6 @@ void mos65xx_AND(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 
 	switch (opCode)
 	{
@@ -218,6 +219,10 @@ void mos65xx_ASL(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	U8 origVal = 0;
 	U8 result = 0;
 
+	if (!(opCode == 0x0A)) {
+		address = addrm_functions[addrm](pProcessor);
+	}
+
 	switch (opCode) {
 		case 0x0A: // accumulator
 			pProcessor->cycles.currentOp = 2;
@@ -241,7 +246,6 @@ void mos65xx_ASL(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	if (opCode == 0x0A) {
 		origVal = pProcessor->reg.AC;
 	} else {
-		address = addrm_functions[addrm](pProcessor);
 		origVal = addrm_read8(pProcessor, address);
 	}
 
@@ -318,6 +322,8 @@ void mos65xx_BIT(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	U8 memValue = 0;
 	mos65xx_addr address = 0;
+	
+	address = addrm_functions[addrm](pProcessor);
 
 	switch (opCode) {
 		case 0x24: // zeropage
@@ -330,7 +336,6 @@ void mos65xx_BIT(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	memValue = addrm_read8(pProcessor, address);
 
 	SR_COND_SET_N(CHK_IF_N(memValue));
@@ -523,6 +528,8 @@ void mos65xx_CMP(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	mos65xx_addr address = 0;
 	U16 oldPC = pProcessor->reg.PC;
 	U8 memValue = 0;
+	
+	address = addrm_functions[addrm](pProcessor);
 
 	switch (opCode) {
 		case 0xC9: // immediate
@@ -552,7 +559,6 @@ void mos65xx_CMP(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	memValue = addrm_read8(pProcessor, address);
 
 	switch (opCode)
@@ -581,6 +587,8 @@ void mos65xx_CPX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	U8 memValue = 0;
 	mos65xx_addr address;
+	
+	address = addrm_functions[addrm](pProcessor);
 
 	switch (opCode) {
 		case 0xE0: // immediate
@@ -595,7 +603,6 @@ void mos65xx_CPX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	memValue = addrm_read8(pProcessor, address);
 	
 	mos65xx_compare(pProcessor, pProcessor->reg.X, memValue);
@@ -613,6 +620,8 @@ void mos65xx_CPY(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	U8 memValue = 0;
 	mos65xx_addr address;
+	
+	address = addrm_functions[addrm](pProcessor);
 
 	switch (opCode) {
 		case 0xC0: // immediate
@@ -627,7 +636,6 @@ void mos65xx_CPY(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	memValue = addrm_read8(pProcessor, address);
 	
 	mos65xx_compare(pProcessor, pProcessor->reg.Y, memValue);
@@ -645,6 +653,8 @@ void mos65xx_DEC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	mos65xx_addr address;
 	U8 memValue;
+	
+	address = addrm_functions[addrm](pProcessor);
 
 	switch (opCode) {
 		case 0xC6:  //	zeropage
@@ -663,7 +673,6 @@ void mos65xx_DEC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	memValue = addrm_read8(pProcessor, address) - 1;
 	addrm_write8(pProcessor, address, memValue);
 
@@ -723,6 +732,8 @@ void mos65xx_EOR(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	mos65xx_addr address;	
 	U16 oldPC = pProcessor->reg.PC;
 
+	address = addrm_functions[addrm](pProcessor);
+
 	switch (opCode) {
 		case 0x49: // immediate
 			break;
@@ -751,7 +762,6 @@ void mos65xx_EOR(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	pProcessor->reg.AC ^= addrm_read8(pProcessor, address);
 	
 	switch (opCode) {
@@ -780,6 +790,8 @@ void mos65xx_INC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	mos65xx_addr address;
 	U8 memValue = 0;
+	
+	address = addrm_functions[addrm](pProcessor);
 
 	switch (opCode) {
 		case 0xE6:	// zeropage
@@ -798,7 +810,6 @@ void mos65xx_INC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	memValue = addrm_read8(pProcessor, address) + 1;
 	
 	addrm_write8(pProcessor, address, memValue);
@@ -858,6 +869,8 @@ void mos65xx_INY(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 *******************************************************************************/
 void mos65xx_JMP(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	mos65xx_addr address;
+	
+	address = addrm_functions[addrm](pProcessor);
 
 	switch (opCode) {
 		case 0x4C: // absolute
@@ -870,7 +883,6 @@ void mos65xx_JMP(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	pProcessor->reg.PC = address;
 }
 
@@ -907,6 +919,8 @@ void mos65xx_LDA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	U16 oldPC = pProcessor->reg.PC;
 	U16 address = 0;
+	
+	address = addrm_functions[addrm](pProcessor);
 
 	switch (opCode) {
 		case 0xA9:	// Immediate
@@ -936,7 +950,6 @@ void mos65xx_LDA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	pProcessor->reg.AC = addrm_read8(pProcessor, address);
 
 	switch (opCode) {
@@ -966,6 +979,8 @@ void mos65xx_LDX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	U16 oldPC = pProcessor->reg.PC;
 	mos65xx_addr address = 0;
+	
+	address = addrm_functions[addrm](pProcessor);
 
 	switch (opCode) {
 		case 0xA2: // immediate
@@ -986,7 +1001,6 @@ void mos65xx_LDX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	pProcessor->reg.X = addrm_read8(pProcessor, address);
 
 	if (opCode == 0xBE) {
@@ -1009,6 +1023,8 @@ void mos65xx_LDY(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	U16 oldPC = pProcessor->reg.PC;
 	mos65xx_addr address = 0;
+	
+	address = addrm_functions[addrm](pProcessor);
 
 	switch (opCode) {
 		case 0xA0: //immediate
@@ -1029,7 +1045,6 @@ void mos65xx_LDY(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	pProcessor->reg.Y = addrm_read8(pProcessor, address);
 
 	if (opCode == 0xBC) {
@@ -1052,6 +1067,10 @@ void mos65xx_LSR(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	mos65xx_addr address;
 	U8 origVal = 0;
 	U8 shiftedVal = 0;
+	
+	if (!(opCode == 0x4A)) {
+		address = addrm_functions[addrm](pProcessor);
+	}
 
 	switch (opCode) {
 		case 0x4A: // accumulator
@@ -1076,7 +1095,6 @@ void mos65xx_LSR(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	if (opCode == 0x4A) {
 		origVal = pProcessor->reg.AC;
 	} else {
-		address = addrm_functions[addrm](pProcessor);
 		origVal = addrm_read8(pProcessor, address);
 	}
 
@@ -1127,6 +1145,8 @@ void mos65xx_ORA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	mos65xx_addr address;
 	mos65xx_addr oldPC = pProcessor->reg.PC;
 	U8 memValue;
+	
+	address = addrm_functions[addrm](pProcessor);
 
 	switch (opCode) {
 		case 0x09:	// immediate
@@ -1156,7 +1176,6 @@ void mos65xx_ORA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	memValue = addrm_read8(pProcessor, address);
 
 	pProcessor->reg.AC |= memValue;
@@ -1266,6 +1285,10 @@ void mos65xx_ROL(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	U8 memValue;
 	U8 tempCarry = SR_GET_C();
 
+	if (!(opCode == 0x2A)) {
+		address = addrm_functions[addrm](pProcessor);
+	}
+
 	switch (opCode) {
 		case 0x2A:	// accumulator
 			pProcessor->cycles.currentOp = 2;
@@ -1289,7 +1312,6 @@ void mos65xx_ROL(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	if (opCode == 0x2A) {
 		memValue = pProcessor->reg.AC;
 	} else {
-		address = addrm_functions[addrm](pProcessor);
 		memValue = addrm_read8(pProcessor, address);
 	}
 
@@ -1321,6 +1343,10 @@ void mos65xx_ROR(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	mos65xx_addr address;
 	U8 memValue;
 	U8 tempCarry = SR_GET_C();
+	
+	if (!(opCode == 0x6A)) {
+		address = addrm_functions[addrm](pProcessor);
+	}
 
 	switch (opCode) {
 		case 0x6A:	// accumulator
@@ -1345,7 +1371,6 @@ void mos65xx_ROR(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	if (opCode == 0x6A) {
 		memValue = pProcessor->reg.AC;
 	} else {
-		address = addrm_functions[addrm](pProcessor);
 		memValue = addrm_read8(pProcessor, address);
 	}
 
@@ -1414,6 +1439,8 @@ void mos65xx_SBC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	mos65xx_addr address;
 	mos65xx_addr oldPC = pProcessor->reg.PC;
 	U8 memValue = 0;
+	
+	address = addrm_functions[addrm](pProcessor);
 
 	switch (opCode) {
 		case 0xE9: // immediate
@@ -1443,7 +1470,6 @@ void mos65xx_SBC(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	memValue = addrm_read8(pProcessor, address);
 	
 	if (SR_GET_D()) {	// Decimal mode
@@ -1522,6 +1548,8 @@ void mos65xx_SEI(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 void mos65xx_STA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	mos65xx_addr address;
 
+	address = addrm_functions[addrm](pProcessor);
+
 	switch (opCode) {	
 		case 0x85: // zeropage
 			pProcessor->cycles.currentOp = 3;
@@ -1548,7 +1576,6 @@ void mos65xx_STA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	addrm_write8(pProcessor, address, pProcessor->reg.AC);
 }
 
@@ -1562,6 +1589,8 @@ void mos65xx_STA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 *******************************************************************************/
 void mos65xx_STX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	mos65xx_addr address;
+	
+	address = addrm_functions[addrm](pProcessor);
 
 	switch (opCode) {
 		case 0x86: // zeropage
@@ -1577,7 +1606,6 @@ void mos65xx_STX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	addrm_write8(pProcessor, address, pProcessor->reg.X);
 }
 
@@ -1591,6 +1619,8 @@ void mos65xx_STX(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 *******************************************************************************/
 void mos65xx_STY(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 	mos65xx_addr address = 0;
+	
+	address = addrm_functions[addrm](pProcessor);
 
 	switch (opCode) {
 		case 0x84: // zeropage
@@ -1606,7 +1636,6 @@ void mos65xx_STY(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 			pProcessor->cycles.currentOp = 0;
 	}
 
-	address = addrm_functions[addrm](pProcessor);
 	addrm_write8(pProcessor, address, pProcessor->reg.Y);
 }
 
@@ -1729,7 +1758,7 @@ void mos65xx_TYA(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 }
 
 /*******************************************************************************
-* Interrupt
+* Interrupt request
 *
 * push PC+2, push SR, ($FFFE) -> PC
 *
@@ -1740,8 +1769,30 @@ void mos65xx_IRQ(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 
 	UNUSED(opCode);
 	UNUSED(addrm);
-	
-	pProcessor->cycles.currentOp = 7;
+
+	if (!SR_GET_I()) {
+
+		addrm_stackPush16(pProcessor, pProcessor->reg.PC);
+		addrm_stackPush8(pProcessor, pProcessor->reg.SR | SR_FLAG_UNUSED);
+
+		pProcessor->reg.PC = addrm_read16(pProcessor, 0xFFFE);
+
+		SR_SET_I();
+	}
+}
+
+/*******************************************************************************
+* Non-maskable interrupt
+*
+* push PC+2, push SR, ($FFFE) -> PC
+*
+* N Z C I D V
+* - - - 1 - -
+*******************************************************************************/
+void mos65xx_NMI(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
+
+	UNUSED(opCode);
+	UNUSED(addrm);
 
 	addrm_stackPush16(pProcessor, pProcessor->reg.PC);
 	addrm_stackPush8(pProcessor, pProcessor->reg.SR | SR_FLAG_UNUSED);
@@ -1757,7 +1808,7 @@ void mos65xx_IRQ(Processor_65xx * pProcessor, U8 opCode, mos65xx_addrm addrm) {
 /*******************************************************************************
 * Branch if condition is met.
 *******************************************************************************/
-void mos65xx_branch(Processor_65xx * pProcessor, U8 condition) {
+static inline void mos65xx_branch(Processor_65xx * pProcessor, U8 condition) {
 
 	mos65xx_addr oldPC = pProcessor->reg.PC;
 	mos65xx_addr branchAddr = addrm_REL(pProcessor);
@@ -1771,7 +1822,7 @@ void mos65xx_branch(Processor_65xx * pProcessor, U8 condition) {
 /*******************************************************************************
 * Binary add/subtract function.
 *******************************************************************************/
-U8 mos65xx_binAdd(Processor_65xx * pProcessor, U8 lValue, U8 rValue) {
+static inline U8 mos65xx_binAdd(Processor_65xx * pProcessor, U8 lValue, U8 rValue) {
 
 	U8 origLValue = lValue;
 
@@ -1779,7 +1830,7 @@ U8 mos65xx_binAdd(Processor_65xx * pProcessor, U8 lValue, U8 rValue) {
 
 	SR_COND_SET_V(
 		!((origLValue & 0x80) ^ (rValue & 0x80)) // Both values have same sign
-	&&	(lValue & 0x80) ^ (rValue & 0x80) // Output signedness differs from values.
+	&&	((lValue & 0x80) ^ (rValue & 0x80)) // Output signedness differs from values.
 	);
 
 	SR_COND_SET_C(origLValue > lValue || (!CHK_IF_Z(rValue) && origLValue == lValue));
@@ -1792,7 +1843,7 @@ U8 mos65xx_binAdd(Processor_65xx * pProcessor, U8 lValue, U8 rValue) {
 /*******************************************************************************
 * Decimal add/subtract function.
 *******************************************************************************/
-U8 mos65xx_decAdd(Processor_65xx * pProcessor, U8 lValue, U8 rValue, I8 operator) {
+static inline U8 mos65xx_decAdd(Processor_65xx * pProcessor, U8 lValue, U8 rValue, I8 operator) {
 
 	U8 retVal = 0;
 
@@ -1830,7 +1881,7 @@ U8 mos65xx_decAdd(Processor_65xx * pProcessor, U8 lValue, U8 rValue, I8 operator
 /*******************************************************************************
 * Comparison function.
 *******************************************************************************/
-void mos65xx_compare(Processor_65xx * pProcessor, U8 lValue, U8 rValue) {
+static inline void mos65xx_compare(Processor_65xx * pProcessor, U8 lValue, U8 rValue) {
 	SR_COND_SET_N(CHK_IF_N(lValue - rValue));
 	SR_COND_SET_Z(lValue == rValue);
 	SR_COND_SET_C(lValue >= rValue);

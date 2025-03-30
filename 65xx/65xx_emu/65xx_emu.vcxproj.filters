@@ -30,9 +30,6 @@
     <ClCompile Include="..\65xx.c">
       <Filter>Source Files\65xx</Filter>
     </ClCompile>
-    <ClCompile Include="..\65xx_addrm.c">
-      <Filter>Source Files\65xx</Filter>
-    </ClCompile>
     <ClCompile Include="..\65xx_assembler.c">
       <Filter>Source Files\65xx</Filter>
     </ClCompile>

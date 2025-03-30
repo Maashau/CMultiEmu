@@ -7,11 +7,14 @@
 #include <time.h>
 #include <assert.h>
 
+#include "SDL2/SDL.h"
+
 
 #include "../65xx.h"
 
 #include "c64.h"
 #include "c64_vic.h"
+#include "c64_cia.h"
 #include "c64_io.h"
 
 #define U8ArrToU32(_r, _g, _b) (U32)(_r << 16 | _g << 8 | _b)
@@ -54,11 +57,14 @@ static RGB_t colorMap[16] = {
 
 static U16 c64_vicVertRaster = 0;
 static U16 c64_vicHorizRaster = 0;
-static U16 c64_vicRasterIrqLine;
 
 static U32 getColor(Processor_65xx * pProcessor);
 static U8 getScreenCharacter(Processor_65xx * pProcessor, U8 row, U8 col);
 static U8 getCharLine(Processor_65xx * pProcessor, U8 character);
+
+U8 VICII_reg[VICII_COUNT];
+
+extern U8 CIA2_read[CIA2_COUNT];
 
 /*******************************************************************************
 * Init VIC II.
@@ -70,9 +76,11 @@ static U8 getCharLine(Processor_65xx * pProcessor, U8 character);
 *******************************************************************************/
 void c64_vicInit(C64_t * pC64) {
 
-	pC64->pProcessor->pMem->IO[D011_screenCtrl1] = 0x1B;
-	pC64->pProcessor->pMem->IO[D016_screenCtrl2] = 0xC8;
-	pC64->pProcessor->pMem->IO[D018_memSetupReg] = 0x12;
+	pC64 = pC64;
+
+	VICII_reg[D011_screenCtrl1] = 0x1B;
+	VICII_reg[D016_screenCtrl2] = 0xC8;
+	VICII_reg[D018_memSetupReg] = 0x12;
 
 	srand(time(NULL));
 
@@ -122,12 +130,12 @@ void c64_vicTick(C64_t * pC64) {
 	}
 
 	/* Write the most significant bit of raster line. */
-	pC64->pProcessor->pMem->IO[D011_screenCtrl1] = (
-		(pC64->pProcessor->pMem->IO[D011_screenCtrl1] & (1 << 7))
+	VICII_reg[D011_screenCtrl1] = (
+		(VICII_reg[D011_screenCtrl1] & (1 << 7))
 	|	(U8)((c64_vicVertRaster & 0x100) >> 1)
 	);
 
-	pC64->pProcessor->pMem->IO[D012_currRasterLine] = ((U8)c64_vicVertRaster & 0xFF);
+	VICII_reg[D012_currRasterLine] = ((U8)c64_vicVertRaster & 0xFF);
 }
 
 /*******************************************************************************
@@ -140,7 +148,9 @@ void c64_vicTick(C64_t * pC64) {
 * Returns: Value read from the VIC II.
 *******************************************************************************/
 U8 c64_vicRead(Processor_65xx * pProcessor, mos65xx_addr address) {
-	return pProcessor->pMem->IO[address];
+	pProcessor = pProcessor;
+
+	return VICII_reg[address & 0xFF];
 }
 
 /*******************************************************************************
@@ -154,9 +164,10 @@ U8 c64_vicRead(Processor_65xx * pProcessor, mos65xx_addr address) {
 * Returns: -
 *******************************************************************************/
 void c64_vicWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value) {
+	pProcessor = pProcessor;
 	
 	//printf("VIC: $%04X = $%02X\r\n", address, value);
-	pProcessor->pMem->IO[address] = value;
+	VICII_reg[address & 0xFF] = value;
 }
 
 /*******************************************************************************
@@ -180,14 +191,14 @@ static U32 getColor(Processor_65xx * pProcessor) {
 		U8 currCol = (c64_vicHorizRaster - C64_H_BLANK - (C64_BORDER_W - C64_VIEW_W) / 2) / 8;
 		U8 chr = getScreenCharacter(pProcessor, currRow, currCol);
 
-		color = colorMap[pProcessor->pMem->IO[D021_backgroundColor] & 0xF];
+		color = colorMap[VICII_reg[D021_backgroundColor] & 0xF];
 
 		if (chr != 0x20) {
 			U8 charLine = getCharLine(pProcessor, chr);
 			U8 subCol = (c64_vicHorizRaster - C64_H_BLANK - (C64_BORDER_W - C64_VIEW_W) / 2) % 8;
 
 			if (charLine & (1 << (7 - subCol))) {
-				mos65xx_addr colorIndex = pProcessor->pMem->IO[0xD800 + currRow * 40 + currCol];
+				mos65xx_addr colorIndex = pProcessor->pMem->RAM[0xD800 + currRow * 40 + currCol];
 				color = colorMap[colorIndex];
 			}
 		}
@@ -195,7 +206,7 @@ static U32 getColor(Processor_65xx * pProcessor) {
 		/* View */
 	} else {
 		/* Border */
-		color = colorMap[pProcessor->pMem->IO[D020_borderColor] & 0xF];
+		color = colorMap[VICII_reg[D020_borderColor] & 0xF];
 	}
 
 	return color;
@@ -212,8 +223,8 @@ static U32 getColor(Processor_65xx * pProcessor) {
 * Returns: Screencode of the character.
 *******************************************************************************/
 static U8 getScreenCharacter(Processor_65xx * pProcessor, U8 row, U8 col) {
-	U8 vicBankIndex = (pProcessor->pMem->IO[0xDD00] & 0x3);
-	U8 screenMemBits = pProcessor->pMem->IO[0xD018] >> 4;
+	U8 vicBankIndex = (CIA2_read[DD00_portASerial] & 0x3);
+	U8 screenMemBits = VICII_reg[D018_memSetupReg] >> 4;
 	mos65xx_addr vicBankAddr = (4 - (vicBankIndex + 1)) * 16 * 1024;
 	mos65xx_addr screenMem = vicBankAddr + ((screenMemBits & 0xF) << 10);
 
@@ -233,11 +244,11 @@ static U8 getCharLine(Processor_65xx * pProcessor, U8 character) {
 	U8 retVal;
 	U8 subRow = (c64_vicVertRaster - C64_V_BLANK - (C64_BORDER_H - C64_VIEW_H) / 2) % 8;
 #if 0
-	U8 vicBankIndex = (pProcessor->pMem->IO[0xDD00] & 0x3);
+	U8 vicBankIndex = (pProcessor->pMem->IOR[0xDD00] & 0x3);
 	if (vicBankIndex == 0 || vicBankIndex == 2) {
 		retVal = pProcessor->pMem->ROM[C64CHAR_START + character + subRow];
 	} else {
-		U8 charMemBits = pProcessor->pMem->IO[0xD018] >> 1;
+		U8 charMemBits = pProcessor->pMem->IOR[0xD018] >> 1;
 		mos65xx_addr vicBankAddr = (4 - (vicBankIndex + 1)) * 16 * 1024;
 		mos65xx_addr charMem = vicBankAddr + ((charMemBits & 0x7) << 11);
 		retVal = pProcessor->pMem->RAM[charMem + character + subRow];

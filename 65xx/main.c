@@ -6,6 +6,7 @@
 // Non-blocking fgetc()
 #include <fcntl.h>
 
+#include <SDL2/SDL.h>
 
 #include "65xx.h"
 
@@ -13,22 +14,9 @@
 #include "apple_i/apple_i.h"
 #include "c64/c64.h"
 
-
-#define usToNs(_usecs)	(_usecs * 1000)
-#define msToNs(_msecs)	(usToNs(_msecs) * 1000)
-#define sToNs(_msecs)		(msToNs(_msecs) * 1000)
-
-#define nsToUs(_nsecs)	(_nsecs / 1000)
-#define nsToMs(_nsecs)	(nsToUs(_nsecs) / 1000)
-
-#define CLOCK_FREQ 1000000
 #define SCREEN_W 60
 #define SCREEN_H 25
-#define REFRESH_RATE_NS msToNs(20)
-#define KB_SCAN_RATE_NS	msToNs(10)
-#define TICK_NS (time_t)((double)1 / (double)CLOCK_FREQ * (double)sToNs(1))
-
-#define TSPEC_NSEC_MAX 999999999
+#define REFRESH_RATE_MS 20
 
 #define DRAW_TERM(_x) if (!(pCliArguments->debugLogging & 1)) _x
 
@@ -39,19 +27,13 @@
 #define CURSOR_RESET	"\033[?25h"
 #define BACKSPACE		"\033[D \033[D"
 
-#define term_conf()	fcntl(0, F_SETFL, O_NONBLOCK); system("/bin/stty raw")
-#define term_deConf() system("/bin/stty cooked"); printf("%s%s", CURSOR_RESET, TERM_RESET)
-
 typedef enum {
 	PRG_ASSEMBLE,
-	PRG_STORE_TO_MEM,
-	PRG_CLEAR_MEM,
-	PRG_WEEKDAY,
-	PRG_KEYBOARD,
 	PRG_BLINK,
 	PRG_NUMQUERY,
 	PRG_PRINT,
 	PRG_APPLE_I,
+	PRG_SCHEDULER,
 	PRG_C64,
 	PRG_OPCODETEST,
 	PRG_NONE
@@ -60,14 +42,14 @@ typedef enum {
 typedef struct {
 	SelectedProgram	selectedProgram;
 	U8				debugLogging;
-	time_t			slowDown;
+	U32				slowDown;
 	U8				fasterSlowDown;
 	U8				noSpeedLimit;
 	U8				logIO;
 } Parameters;
 
-mos65xx_addr keyboardAddr = 0xFDFF;
-mos65xx_addr screenMemAddr = 0xF800;
+mos65xx_addr keyboardAddr = 0xEFFF;
+mos65xx_addr screenMemAddr = 0xE000;
 mos65xx_addr screenMemSize = SCREEN_W * SCREEN_H;
 
 Parameters * handleCLIArguments(int argc, char * argv[]);
@@ -76,24 +58,16 @@ void printHelp(void);
 U8 fnMemRead(Processor_65xx * pProcessor, mos65xx_addr address);
 void fnMemWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value);
 
-U8 readKeyboard(void);
-
 void screenClear(Processor_65xx * pProcessor);
 void screenRefresh(U8 * pMemory, unsigned int freq);
 
 void programSelector(Processor_65xx * pProcessor, Parameters * parameters);
 void programEnd(int selected_program, U8 * pMemory, Processor_65xx * pProcessor);
 
-U8 timePassed(struct timespec * oldTime, struct timespec * newTime, time_t timeToPass);
-
 char lineBuf[512];
 int lineBufIndex = 0;
 char inBuff[20];
 int inBuffIndex = 0;
-
-extern opCode_st * mos65xx__opCodes;
-
-extern FILE * tmpLog;
 
 void * pDevStruct;
 
@@ -105,50 +79,28 @@ void * pDevStruct;
 int main(int argc, char * argv[]) {
 
 	Processor_65xx processor = {0};
-	struct timespec startTime = {0}, endTime = {0};
-	time_t realizedSpeed;
-
-	struct timespec runTime = {0}, syncTime, refreshTime = {0}, kbScanTime = {0};
 
 	Parameters * pCliArguments = handleCLIArguments(argc, argv);
 
 	programSelector(&processor, pCliArguments);
-
-#ifndef _WIN32
-	clock_gettime(CLOCK_REALTIME, &startTime);
-#endif
 
 	if (pCliArguments->selectedProgram == PRG_APPLE_I) {
 		apple_i_run(&processor);
 	} else if (pCliArguments->selectedProgram == PRG_C64) {
 		c64_run(pDevStruct);
 	} else {
-#ifndef _WIN32
-		term_conf();
-#endif
+		
+		U32 screenTicks = SDL_GetTicks();
+		U32 syncTicks = SDL_GetTicks();
 
 		while (1) {
+			U32 currTick = SDL_GetTicks();
+			U32 screenDiff = currTick - screenTicks;
 
-			time_t diff = 0;
 			unsigned int frequency = 0;
 			mos65xx_addr oldPC = processor.reg.PC;
 
-#ifndef _WIN32
-			clock_gettime(CLOCK_REALTIME, &runTime);
-#endif
-
-			if (processor.cycles.currentOp != 0) {
-				/* Calculate elapsed ns. */
-				if (realizedSpeed > runTime.tv_nsec) {
-					diff = TSPEC_NSEC_MAX - (realizedSpeed - runTime.tv_nsec);
-				} else {
-					diff = runTime.tv_nsec - realizedSpeed;
-				}
-
-				frequency = (unsigned int)((double)diff / (double)processor.cycles.currentOp * (double)CLOCK_FREQ) / 1000;
-			}
-
-			realizedSpeed = runTime.tv_nsec;
+			// TODO: create SDL event handler for keyboard inputs.
 
 			mos65xx_handleOp(&processor);
 
@@ -156,107 +108,38 @@ int main(int argc, char * argv[]) {
 
 				DRAW_TERM(screenRefresh(processor.pMem->RAM, frequency));
 
-				term_deConf();
 				printf("\033[m\n\n0x%04X: Infinite loop detected!\n\n", oldPC);
 				break;
 			}
 
 
-			if (timePassed(&refreshTime, &runTime, REFRESH_RATE_NS)) {
+			if (!(pCliArguments->debugLogging) && screenDiff >= REFRESH_RATE_MS) {
 				/* Sync screen refreshing to 50 hz. */
-				refreshTime = runTime;
 				DRAW_TERM(screenRefresh(processor.pMem->RAM, frequency));
-			}
 
-			/* Read keyboard every 10 ms. */
-			if (timePassed(&kbScanTime, &runTime, KB_SCAN_RATE_NS)) {
-				U8 pressedKey = 0;
-				kbScanTime = runTime;
-
-				pressedKey = readKeyboard();
-				if (pressedKey == 0x1B) { // ESC detected.
-					printf(BACKSPACE);
-					pressedKey = readKeyboard();
-
-					if (pressedKey == 0xFF || pressedKey == 0x1B) {  // ESC key pressed, quit.
-
-						term_deConf();
-
-						printf("ESC key hit.\n");
-						break;
-					} else if (pressedKey == '[') { // CTRL character detected.
-						printf(BACKSPACE); // TODO Doesn't erase ABCD from arrow keys
-					} else { // Unknown ESC sequence.
-						printf(BACKSPACE);
-					}
-				} else if (pressedKey == 0x09) { // TAB pressed (reset).
-					
-					if (processor.pMem != NULL) {
-						free(processor.pMem->IO);
-						free(processor.pMem->RAM);
-						free(processor.pMem->ROM);
-					}
-
-					U8 * pRAM = malloc(U16_MAX);
-					processor.pMem->RAM = pRAM;
-					processor.pMem->ROM = NULL;
-					processor.pMem->IO = NULL;
-					mos65xx_init(&processor, processor.pMem, fnMemRead, fnMemWrite, pCliArguments->debugLogging, pCliArguments);
-					DRAW_TERM(screenClear(&processor));
-				}
-
-				fnMemWrite(&processor, keyboardAddr, pressedKey);
-
+				screenTicks = currTick;
 			}
 
 			processor.totOperations++;
 
 			if (!pCliArguments->noSpeedLimit) {
-				/* Sync to 1 Mhz. */
-#ifndef _WIN32
-				do {
+				/* TODO: Sync to 1 Mhz. */
+				U32 syncDiff = currTick - syncTicks;
 
-					clock_gettime(CLOCK_REALTIME, &syncTime);
+				while (syncDiff < pCliArguments->slowDown) {
+			
+					currTick = SDL_GetTicks();
+					syncDiff = currTick - syncTicks;
+				}
 
-				} while (!timePassed(&runTime, &syncTime, (pCliArguments->slowDown ? pCliArguments->slowDown * (pCliArguments->fasterSlowDown ? 1 : 1000) : processor.cycles.currentOp) * TICK_NS));
-#endif
+				syncTicks = currTick;
 			}
 		}
 	}
-#ifndef _WIN32
-	clock_gettime(CLOCK_REALTIME, &endTime);
-#endif
 
 	programEnd(pCliArguments->selectedProgram, processor.pMem->RAM, &processor);
 
-	time_t secsPassed, nsecsPassed = 0;
-
-	secsPassed = endTime.tv_sec - startTime.tv_sec;
-
-	if (secsPassed != 0 && (endTime.tv_nsec < startTime.tv_nsec)) {
-		secsPassed--;
-	}
-
-	if (startTime.tv_nsec > endTime.tv_nsec) {
-		nsecsPassed = TSPEC_NSEC_MAX - (startTime.tv_nsec - endTime.tv_nsec);
-	} else {
-		nsecsPassed = endTime.tv_nsec - startTime.tv_nsec;
-	}
-
-	printf(
-		"Operations performed: %lu\n\n Start time: %ds %ldms %ldns\n   End time: %lds %ldms %ldns\n\n Difference: %lds %ldms %ldns\n\nCycle count: %llu\n\n",
-		processor.totOperations,
-		0,
-		nsToMs(startTime.tv_nsec),
-		startTime.tv_nsec - msToNs(nsToMs(startTime.tv_nsec)),
-		endTime.tv_sec - startTime.tv_sec,
-		nsToMs(endTime.tv_nsec),
-		endTime.tv_nsec - msToNs(nsToMs(endTime.tv_nsec)),
-		secsPassed,
-		nsToMs(nsecsPassed),
-		nsecsPassed - msToNs(nsToMs(nsecsPassed)),
-		processor.cycles.totalCycles
-	);
+	return 0;
 }
 
 /*******************************************************************************
@@ -295,29 +178,6 @@ void fnMemWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value) {
 }
 
 /*******************************************************************************
-* Read one byte from the stdin without blocking.
-*
-* Arguments:
-*	none
-*
-* Returns: Byte representing the key pressed on the keyboard.
-*******************************************************************************/
-U8 readKeyboard(void) {
-	U8 key;
-
-	key = fgetc(stdin);
-
-	if (key != 0xFF) {
-		if (key == '\r' || key == 0x7F) {
-			printf("\b \b");
-		}
-		printf("\b \b");
-	}
-
-	return key;
-}
-
-/*******************************************************************************
 * Clears and setups screen.
 *
 * Arguments:
@@ -328,7 +188,7 @@ U8 readKeyboard(void) {
 void screenClear(Processor_65xx * pProcessor) {
 	system("clear");
 
-	printf("%s%s", CURSOR_OFF, COLOR_GRY_BLK);
+	printf("%s", CURSOR_OFF);
 
 	for (int memIndex = screenMemAddr + screenMemSize; memIndex >= screenMemAddr; memIndex--) {
 		fnMemWrite(pProcessor, memIndex, ' ');
@@ -359,10 +219,10 @@ void screenRefresh(U8 * pMemory, unsigned int frequency) {
 	}
 	screenBuf[sizeof(screenBuf) - 1] = '\0';
 
-	printf("%s\033[1;1H%s%s", COLOR_GRY_BLK, screenBuf, COLOR_BLK_BLK);
+	printf("\033[1;1H%s", screenBuf);
 
 	if (secondCounter++ >= 50) {
-		printf("%s\033[%d;1H%10u hz%s", COLOR_GRY_BLK, SCREEN_H + 1, frequency, COLOR_BLK_BLK);
+		//printf("%s\033[%d;1H%10u hz%s", COLOR_GRY_BLK, SCREEN_H + 1, frequency, COLOR_BLK_BLK);
 		secondCounter = 0;
 	}
 	printf("\033[%d;1H", SCREEN_H + 2);
@@ -387,26 +247,17 @@ void programSelector(Processor_65xx * pProcessor, Parameters * parameters) {
 		if (parameters->selectedProgram == PRG_ASSEMBLE) {
 			//mos65xx_assemble("./prg/asm/32bitdiv.asm", pMemory);
 			exit(0);
-		} else if (parameters->selectedProgram == PRG_STORE_TO_MEM) { // write values to memory.
-			loadFile(pMemory, 0xFE00, "./prg/bin/memWrite.rom", mos65xx_BIN);
-			addRAMArea(0x0000, 0xFFFF); // System & User space
-		} else if (parameters->selectedProgram == PRG_CLEAR_MEM) { // Clears X amount of memory from memory address (100), Y
-			loadFile(pMemory, 0xFE00, "./prg/bin/memClear.rom", mos65xx_BIN);
-			addRAMArea(0x0000, 0xFFFF); // System & User space
-		} else if (parameters->selectedProgram == PRG_WEEKDAY) { // Day of the week. Y = year, X = month, AC = day
-			loadFile(pMemory, 0xFE00, "./prg/bin/weekday.rom", mos65xx_BIN);
-			addRAMArea(0x0000, 0xFFFF); // System & User space
-		} else if (parameters->selectedProgram == PRG_KEYBOARD) {
-			loadFile(pMemory, 0xFE00, "./prg/bin/kbTest.rom", mos65xx_BIN);
-			addRAMArea(0x0000, 0xFFFF); // System & User space
 		} else if (parameters->selectedProgram == PRG_BLINK) {
-			loadFile(pMemory, 0xFE00, "./prg/bin/blink.rom", mos65xx_BIN);
+			loadFile(pMemory, 0xF000, "./prg/bin/blink.rom", mos65xx_BIN);
 			addRAMArea(0x0000, 0xFFFF); // System & User space
 		} else if (parameters->selectedProgram == PRG_NUMQUERY) {
-			loadFile(pMemory, 0xFE00, "./prg/bin/numQuery.rom", mos65xx_BIN);
+			loadFile(pMemory, 0xF000, "./prg/bin/numQuery.rom", mos65xx_BIN);
 			addRAMArea(0x0000, 0xFFFF); // System & User space
 		} else if (parameters->selectedProgram == PRG_PRINT) {
-			loadFile(pMemory, 0xFE00, "./prg/bin/print.rom", mos65xx_BIN);
+			loadFile(pMemory, 0xF000, "./prg/bin/print.rom", mos65xx_BIN);
+			addRAMArea(0x0000, 0xFFFF); // System & User space
+		} else if (parameters->selectedProgram == PRG_SCHEDULER) {
+			loadFile(pMemory, 0xF000, "./prg/bin/scheduler.rom", mos65xx_BIN);
 			addRAMArea(0x0000, 0xFFFF); // System & User space
 		} else if (parameters->selectedProgram == PRG_OPCODETEST) {
 			loadFile(pMemory, 0x0000, "./prg/test/6502_functional_test.bin", mos65xx_BIN);
@@ -417,7 +268,6 @@ void programSelector(Processor_65xx * pProcessor, Parameters * parameters) {
 
 		pMem->RAM = pMemory;
 		pMem->ROM = NULL;
-		pMem->IO = NULL;
 
 		mos65xx_init(pProcessor, pMem, fnMemRead, fnMemWrite, parameters->debugLogging, parameters);
 
@@ -444,58 +294,9 @@ void programSelector(Processor_65xx * pProcessor, Parameters * parameters) {
 *
 *******************************************************************************/
 void programEnd(int selected_program, U8 * pMemory, Processor_65xx * pProcessor) {
-
-	if (selected_program == PRG_WEEKDAY) {
-		printf(
-			"weekday for %d.%d.%d is %d (%s)\n\n",
-			pMemory[5],
-			pMemory[3],
-			pMemory[1] + 1900,
-			pProcessor->reg.AC,
-			pProcessor->reg.AC == 1 ? "MON" :
-				pProcessor->reg.AC == 2 ? "TUE" :
-					pProcessor->reg.AC == 3 ? "WED" :
-						pProcessor->reg.AC == 4 ? "THU" :
-							pProcessor->reg.AC == 5 ? "FRI" :
-								pProcessor->reg.AC == 6 ? "SAT" :
-									pProcessor->reg.AC == 7 ? "SUN" : "ERR!"
-		);
-	} else if (selected_program == PRG_KEYBOARD) {
-		printf("String entered: %s\n\n", &pMemory[screenMemAddr]);
-	}
-
-}
-
-/*******************************************************************************
-* Checks if given amount of time has been passed between two timespecs.
-*
-* Arguments:
-*	pOldTime		- Starting time of the comparison.
-*	pNewTime		- Test time.
-*	timeToPass		- Amount of nano seconds to pass.
-*
-* Returns: 1 if passed, otherwise 0.
-*******************************************************************************/
-U8 timePassed(struct timespec * pOldTime, struct timespec * pNewTime, time_t timeToPass) {
-
-	U8 passed = 0;
-	time_t diff;
-
-	/* Calculate elapsed ns. */
-	if (pOldTime->tv_nsec > pNewTime->tv_nsec) {
-		diff = TSPEC_NSEC_MAX - (pOldTime->tv_nsec - pNewTime->tv_nsec);
-	} else {
-		diff = pNewTime->tv_nsec - pOldTime->tv_nsec;
-	}
-
-	/* Add elapsed seconds to the diff. */
-	diff += (pNewTime->tv_sec - pOldTime->tv_sec) * (TSPEC_NSEC_MAX + 1);
-
-	if (diff > timeToPass) {
-		passed = 1;
-	}
-
-	return passed;
+	selected_program = selected_program;
+	pMemory = pMemory;
+	pProcessor = pProcessor;
 }
 
 /*******************************************************************************
@@ -550,7 +351,7 @@ Parameters * handleCLIArguments(int argc, char * argv[]) {
 
 		} else if (currArg[1] == 's') {
 
-			pCLIArgs->debugLogging |= 2;
+			//pCLIArgs->debugLogging |= 2;
 
 			pCLIArgs->fasterSlowDown = currArg[2] == 'f' ? 1 : 0;
 			pCLIArgs->noSpeedLimit = currArg[2] == 'n' ? 1 : 0;
@@ -561,6 +362,8 @@ Parameters * handleCLIArguments(int argc, char * argv[]) {
 				pCLIArgs->slowDown = 500;
 			} else {
 				argIdx++;
+				
+				currArg = argv[argIdx];
 
 				for (int strIdx = 0; currArg[strIdx] != 0; strIdx++) {
 					if (!isdigit(currArg[strIdx])) {
@@ -590,15 +393,12 @@ Parameters * handleCLIArguments(int argc, char * argv[]) {
 *******************************************************************************/
 void printHelp(void) {
 	printf("Valid program indexes:\n");
-	printf("\t%d - Store to memory\n", PRG_STORE_TO_MEM);
-	printf("\t%d - Clear memory region\n", PRG_CLEAR_MEM);
-	printf("\t%d - Calculate weekday (1-7) from date\n", PRG_WEEKDAY);
 	printf("\t%d - Run the assembler\n", PRG_ASSEMBLE);
-	printf("\t%d - Keyboard test, prints out 5 characters entered\n", PRG_KEYBOARD);
 	printf("\t%d - Cursor blink\n", PRG_BLINK);
 	printf("\t%d - Number query\n", PRG_NUMQUERY);
 	printf("\t%d - String print test\n", PRG_PRINT);
 	printf("\t%d - Apple I emulator\n", PRG_APPLE_I);
+	printf("\t%d - Task scheduler\n", PRG_SCHEDULER);
 	printf("\t%d - Commodore 64 emulator\n", PRG_C64);
 	printf("\t%d - Opcode test\n", PRG_OPCODETEST);
 	printf("\n\n");

@@ -3,6 +3,9 @@
 *******************************************************************************/
 #ifndef FILE_65xx_TYPES_H
 #define FILE_65xx_TYPES_H
+
+#include <stdio.h>
+
 typedef unsigned char U8;
 typedef signed char I8;
 typedef unsigned short U16;
@@ -33,7 +36,6 @@ typedef void			(*mos65xx_memWrite)(Processor_65xx * pProcessor, mos65xx_addr add
 typedef struct {
 	U8 * ROM;
 	U8 * RAM;
-	U8 * IO;
 } Memory_areas;
 
 typedef struct Processor_65xx_st {
@@ -45,7 +47,6 @@ typedef struct Processor_65xx_st {
 	Memory_areas *		pMem;
 	void *				pUtil;
 	U8					lastOp;
-	U8					interrupt;
 	U8					debugLevel;
 	void *				event;
 } Processor_65xx;

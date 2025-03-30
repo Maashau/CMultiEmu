@@ -35,7 +35,7 @@ U8 isROMAddress(mos65xx_addr address);
 U8 isRAMAddress(mos65xx_addr address);
 
 void mos65xx_handleOp(Processor_65xx * pProcessor);
-void mos65xx_irqEnter(Processor_65xx * pProcessor);
-void mos65xx_irqLeave(Processor_65xx * pProcessor);
+void mos65xx_irqOn(Processor_65xx * pProcessor);
+void mos65xx_irqOff(Processor_65xx * pProcessor);
 
 void mos65xx_assemble(char * asmFilePath, U8 * memory);

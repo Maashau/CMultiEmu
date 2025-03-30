@@ -76,22 +76,28 @@ void mos65xx_init(
 void mos65xx_handleOp(Processor_65xx * pProcessor) {
 
 	mos65xx_reg_st oldReg = pProcessor->reg;
-	U8 operands[2];
+	U8 pOperands[2];
 	U8 opCode;
 
 	/* Read operands for debug printing. */
-	operands[0] = addrm_read8(pProcessor, pProcessor->reg.PC + 1);
-	operands[1] = addrm_read8(pProcessor, pProcessor->reg.PC + 2);
+	pOperands[0] = addrm_read8(pProcessor, pProcessor->reg.PC + 1);
+	pOperands[1] = addrm_read8(pProcessor, pProcessor->reg.PC + 2);
+	
+	if (pProcessor->reg.PC == 0) {
+		//__debugbreak();
+	}
 
 	/* Handle instruction. */
 	pProcessor->cycles.currentOp = 0;
 	opCode = addrm_read8(pProcessor, addrm_IMM(pProcessor));
+
+
 	mos65xx__opCodes[opCode].handler(pProcessor, opCode, mos65xx__opCodes[opCode].addrm);
 
 	pProcessor->lastOp = opCode;
 	pProcessor->cycles.totalCycles += pProcessor->cycles.currentOp;
 
-	logOperation(pProcessor, &oldReg, opCode, operands);
+	logOperation(pProcessor, &oldReg, opCode, pOperands);
 }
 
 /*******************************************************************************
@@ -102,31 +108,25 @@ void mos65xx_handleOp(Processor_65xx * pProcessor) {
 *
 * Returns: -
 *******************************************************************************/
-void mos65xx_irqEnter(Processor_65xx * pProcessor) {
+U8 dbg_hwIntActive;
+void mos65xx_irqOn(Processor_65xx * pProcessor) {
 
-	if ((pProcessor->reg.SR & SR_FLAG_I) == 0 && pProcessor->interrupt == 0) {
-		
-		DBG_LOG(pProcessor, fprintf(tmpLog, "\r\n--- Entering interrupt routine ------------------------------------------------------------"));
+	dbg_hwIntActive = 1;
 
-		mos65xx_IRQ(pProcessor, 0, IMP);
-
-		pProcessor->interrupt = 1;
-
-	}
+	mos65xx_IRQ(pProcessor, 0, IMP);
 }
 
 /*******************************************************************************
-* Return from interrupt hit
+* Return from interrupt.
 *
 * Arguments:
 *	pProcessor - Pointer to a processor data structure.
 *
 * Returns: -
 *******************************************************************************/
-void mos65xx_irqLeave(Processor_65xx * pProcessor) {
-	DBG_LOG(pProcessor, fprintf(tmpLog, "\r\n--- Leaving interrupt routine -------------------------------------------------------------"));
-
-	pProcessor->interrupt = 0;
+void mos65xx_irqOff(Processor_65xx * pProcessor) {
+	pProcessor = pProcessor;
+	dbg_hwIntActive = 0;
 }
 
 /*******************************************************************************
@@ -244,6 +244,11 @@ void loadFile(U8 * pMemory, U16 offset, const char * pPath, mos65xx_fileType fil
 	for (int memIdx = offset; memIdx <= 0xFFFF; memIdx++) {
 		int tempByte = fgetc(fpPrg);
 
+		if (memIdx == 0) {
+			printf("\n\nError: Too large binary (%s)...\n\n", pPath);
+			exit(1);
+		}
+
 		if (tempByte != EOF) {
 			pMemory[memIdx] = (U8)tempByte;
 		} else {
@@ -270,127 +275,35 @@ void logOperation(
 	mos65xx_reg_st *		oldReg,
 	U8						opCode,
 	U8 *					operBytes
-) {
-	char * asmOperand = calloc(9, sizeof(char));
-	U8 operands[4];
-	char memValue[7] = {0};
-	char * opLine = NULL;
+) {	
+	char * opLine = (char *)malloc(512);
 
-	operands[0] = operBytes[0] >> 4;
-	operands[1] = operBytes[0] & 0xF;
-	operands[2] = operBytes[1] >> 4;
-	operands[3] = operBytes[1] & 0xF;
+	extern U8 CIA1_read[0xF];
 
-	for (U64 operIdx = 0; operIdx < sizeof(operands); operIdx++) {
-		if (operands[operIdx] < 10) {
-			operands[operIdx] += '0';
-		} else {
-			operands[operIdx] += 'A' - 10;
-		}
-	}
-
-	opLogging = 1;
-
-	switch (mos65xx__opCodes[opCode].addrm)
-	{
-		case ACC:
-			sprintf(asmOperand, " A      ");
-			break;
-		case ABS:
-			sprintf(memValue, "$%02X", addrm_read8(pProcessor, (mos65xx_addr)(operBytes[0] | (operBytes[1] << 8))));
-			
-			sprintf(asmOperand, " $%c%c%c%c  ", operands[2], operands[3], operands[0], operands[1]);
-			break;
-		case ABX:
-			sprintf(memValue, "$%02X", addrm_read8(pProcessor, (mos65xx_addr)(operBytes[0] | (operBytes[1] << 8)) + oldReg->X));
-			
-			sprintf(asmOperand, " $%c%c%c%c,X", operands[2], operands[3], operands[0], operands[1]);
-			break;
-		case ABY:
-			sprintf(memValue, "$%02X", addrm_read8(pProcessor, (mos65xx_addr)(operBytes[0] | (operBytes[1] << 8)) + oldReg->Y));
-			
-			sprintf(asmOperand, " $%c%c%c%c,Y", operands[2], operands[3], operands[0], operands[1]);
-			break;
-		case IMM:
-			sprintf(asmOperand, "#$%c%c    ", operands[0], operands[1]);
-			break;
-		case IND: {
-			mos65xx_addr indAddress = addrm_read16(pProcessor, (mos65xx_addr)(operBytes[0] | (operBytes[1] << 8)));
-			sprintf(memValue, "$%02X", addrm_read8(pProcessor, indAddress));
-
-			sprintf(asmOperand, "($%c%c%c%c) ", operands[2], operands[3], operands[0], operands[1]);
-			break;
-		}
-		case INX: {
-			mos65xx_addr indAddress = addrm_read16(pProcessor, (mos65xx_addr)operBytes[0] + oldReg->X);
-			sprintf(memValue, "$%02X", addrm_read8(pProcessor, indAddress));
-			
-			sprintf(asmOperand, "($%c%c,X) ", operands[0], operands[1]);
-			break;
-		}
-		case INY: {
-			mos65xx_addr indAddress = addrm_read16(pProcessor, (mos65xx_addr)operBytes[0]) + oldReg->Y;
-			sprintf(memValue, "$%02X", addrm_read8(pProcessor, indAddress));
-
-			sprintf(asmOperand, "($%c%c),Y ", operands[0], operands[1]);
-			break;
-		}
-		case REL:
-			sprintf(asmOperand, "  %-6d", (signed char)operBytes[0]);
-			break;
-		case ZPG:
-			sprintf(memValue, "$%02X", addrm_read8(pProcessor, operBytes[0]));
-
-			sprintf(asmOperand, " $%c%c    ", operands[0], operands[1]);
-			break;
-		case ZPX:
-			sprintf(memValue, "$%02X", addrm_read8(pProcessor, operBytes[0] + oldReg->X));
-
-			sprintf(asmOperand, " $%c%c,X  ", operands[0], operands[1]);
-			break;
-		case ZPY:
-			sprintf(memValue, "$%02X", addrm_read8(pProcessor, operBytes[0] + oldReg->Y));
-
-			sprintf(asmOperand, " $%c%c,Y  ", operands[0], operands[1]);
-			break;
-		
-		case NON:
-		case IMP:
-			sprintf(asmOperand, "        ");
-			break;
-	}
-
-	opLogging = 0;
-
-	opLine = (char *)malloc(512);
-
-	sprintf(opLine, "\r\n%04X | %02X %c%c %c%c | %-4s %s | %-3s | %02X %02X %02X %02X | %d%d%d%d%d%d | %1d (%llu)",
+	sprintf(opLine, "\n%04X | %s |  %02X %02X %02X | %02X %02X %02X %02X | %c%c%c%c%c%c | %1d (%llu) | %c | %u",
 		oldReg->PC,
-		opCode,
-		mos65xx__opCodes[opCode].bytes > 1 ? operands[0] : ' ',
-		mos65xx__opCodes[opCode].bytes > 1 ? operands[1] : ' ',
-		mos65xx__opCodes[opCode].bytes > 2 ? operands[2] : ' ',
-		mos65xx__opCodes[opCode].bytes > 2 ? operands[3] : ' ',
 		mos65xx__opCodes[opCode].mnemonic,
-		asmOperand,
-		memValue,
+		opCode,
+		operBytes[0],
+		operBytes[1],
 		pProcessor->reg.AC,
 		pProcessor->reg.X,
 		pProcessor->reg.Y,
 		pProcessor->reg.SP,
-		pProcessor->reg.SR & SR_FLAG_N ? 1 : 0,
-		pProcessor->reg.SR & SR_FLAG_V ? 1 : 0,
-		pProcessor->reg.SR & SR_FLAG_D ? 1 : 0,
-		pProcessor->reg.SR & SR_FLAG_I ? 1 : 0,
-		pProcessor->reg.SR & SR_FLAG_Z ? 1 : 0,
-		pProcessor->reg.SR & SR_FLAG_C ? 1 : 0,
+		pProcessor->reg.SR & SR_FLAG_N ? 'N' : ' ',
+		pProcessor->reg.SR & SR_FLAG_V ? 'V' : ' ',
+		pProcessor->reg.SR & SR_FLAG_D ? 'D' : ' ',
+		pProcessor->reg.SR & SR_FLAG_I ? 'I' : ' ',
+		pProcessor->reg.SR & SR_FLAG_Z ? 'Z' : ' ',
+		pProcessor->reg.SR & SR_FLAG_C ? 'C' : ' ',
 		pProcessor->cycles.currentOp,
-		pProcessor->cycles.totalCycles
+		pProcessor->cycles.totalCycles,
+		dbg_hwIntActive ? 'I' : ' ',
+		CIA1_read[4] | (CIA1_read[5] << 8)
 	);
 
 	DBG_PRINT(pProcessor, printf("%s", opLine));
 	DBG_LOG(pProcessor, fprintf(tmpLog, "%s", opLine));
 
 	free(opLine);
-	free(asmOperand);
 }

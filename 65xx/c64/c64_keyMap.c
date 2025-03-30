@@ -1,4 +1,3 @@
-
 /* A = Column, B = Row*/
 enum {  /*B0*/                /*B1*/               /*B2*/               /*B3*/               /*B4*/               /*B5*/               /*B6*/               /*B7*/
 /*A0*/  C64_KB_DEL  = 0x0101, C64_KB_RET = 0x0102, C64_KB_CL  = 0x0104, C64_KB_F7  = 0x0108, C64_KB_F1  = 0x0110, C64_KB_F3  = 0x0120, C64_KB_F5  = 0x0140, C64_KB_CU    = 0x0180,
@@ -165,9 +164,7 @@ U16 c64_keyMap[] = {
     C64_KB_RSH,
     C64_KB_CTR,
     C64_KB_COM,
-    0,
-    0,
-    0,
+    C64_KB_EQ,
     0,
     0,
     0,

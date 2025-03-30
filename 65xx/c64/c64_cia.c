@@ -21,31 +21,32 @@ enum {
 };
 
 typedef struct {
-	U16 *			DEF;
-	mos65xx_addr	LSB;
-	mos65xx_addr	MSB;
-	mos65xx_addr	CTRL;
+	U8 *			DEFLSB;
+	U8 *			DEFMSB;
+	U8 *			CURRLSB;
+	U8 *			CURRMSB;
+	U8 *			CTRL;
 } CIA_Timer;
 
+U8 CIA1_read[CIA1_COUNT];
+U8 CIA1_write[CIA1_COUNT];
+
+U8 CIA2_read[CIA2_COUNT];
+U8 CIA2_write[CIA2_COUNT];
 
 static void CIA__timAdvance(C64_t * pC64, U8 timerID);
 
-extern U8 clearKeys;
-
-static U16 CIA1_timAStartVal;
-static U16 CIA1_timBStartVal;
-static U16 CIA2_timAStartVal;
-static U16 CIA2_timBStartVal;
-
-static U8 CIA1_irqEn;
-static U8 CIA2_irqEn;
-
 static CIA_Timer timers[] = {
-	{&CIA1_timAStartVal, DC04_timerAValueLSB, DC05_timerAValueMSB, DC0E_timerACtrl},
-	{&CIA1_timBStartVal, DC06_timerBValueLSB, DC07_timerBValueMSB, DC0F_timerBCtrl},
-	{&CIA2_timAStartVal, DD04_timerAValueLSB, DD05_timerAValueMSB, DD0E_timerACtrl},
-	{&CIA2_timBStartVal, DD06_timerBValueLSB, DD07_timerBValueMSB, DD0F_timerBCtrl}
+	{&CIA1_write[DC04_timerAValueLSB], &CIA1_write[DC05_timerAValueMSB], &CIA1_read[DC04_timerAValueLSB], &CIA1_read[DC05_timerAValueMSB], &CIA1_write[DC0E_timerACtrl]},
+	{&CIA1_write[DC06_timerBValueLSB], &CIA1_write[DC07_timerBValueMSB], &CIA1_read[DC06_timerBValueLSB], &CIA1_read[DC07_timerBValueMSB], &CIA1_write[DC0F_timerBCtrl]},
+	{&CIA2_write[DD04_timerAValueLSB], &CIA2_write[DD05_timerAValueMSB], &CIA2_read[DD04_timerAValueLSB], &CIA2_read[DD05_timerAValueMSB], &CIA2_write[DD0E_timerACtrl]},
+	{&CIA2_write[DD06_timerBValueLSB], &CIA2_write[DD07_timerBValueMSB], &CIA2_read[DD06_timerBValueLSB], &CIA2_read[DD07_timerBValueMSB], &CIA2_write[DD0F_timerBCtrl]}
 };
+
+static inline U8 AND_IS(U16 base, U16 and, U16 mask) {
+	U8 retVal = ((base & mask) == and);
+	return retVal;
+}
 
 /*******************************************************************************
 * Init CIA 1 and 2.
@@ -74,8 +75,8 @@ void c64_ciaTick(C64_t * pC64) {
 	CIA__timAdvance(pC64, CIA2_TIM_A);
 	CIA__timAdvance(pC64, CIA2_TIM_B);
 
-	if ((pC64->pProcessor->pMem->IO[DC0D_intCtrlStatusReg] & CIA1_irqEn & CIA_IRQ_EN_MASK)
-	||	(pC64->pProcessor->pMem->IO[DD0D_intCtrlStatusReg] & CIA2_irqEn & CIA_IRQ_EN_MASK)
+	if ((CIA1_read[DC0D_intCtrlStatusReg] & CIA1_write[DC0D_intCtrlStatusReg] & CIA_IRQ_EN_MASK)
+	||	(CIA2_read[DD0D_intCtrlStatusReg] & CIA2_write[DD0D_intCtrlStatusReg] & CIA_IRQ_EN_MASK)
 	) {
 		pC64->irqActive |= IRQ_CIA;
 	} else {
@@ -94,31 +95,46 @@ void c64_ciaTick(C64_t * pC64) {
 *******************************************************************************/
 U8 c64_ciaRead(C64_t * pC64, mos65xx_addr address) {
 
-	Processor_65xx * pProcessor = pC64->pProcessor;
-    U8 retVal;
+    U8 retVal = 0xFF;
+	U8 subAddr = address & 0xFF;
 
-	if (address == 0xDC01) {
-		U8 tempCol = ~pProcessor->pMem->IO[DC00_portAKbdColJStick2];
+	if (AND_IS(address, 0xDC00, 0xFF00)) {
+		/* CIA1 register reads. */
 
-		pProcessor->pMem->IO[DC01_portBKbdRowJStick1] = 0xFF;
+		if (AND_IS(address, 0x01, 0xFF)) {
 
-		for (U16 currCharacter = 0; currCharacter <= 0xFF; currCharacter++) {
-			if (pC64->keyBuffer[currCharacter]
-			&&	(c64_keyMap[currCharacter] >> 8) & tempCol
-			) {
-				U8 rowFilter = ~(U8)(c64_keyMap[currCharacter] & 0xFF);
-				pProcessor->pMem->IO[DC01_portBKbdRowJStick1] &= rowFilter;
+			U8 tempCol = ~CIA1_read[DC00_portAKbdColJStick2];
+
+			CIA1_read[DC01_portBKbdRowJStick1] = 0xFF;
+
+			for (U16 currCharacter = 0; currCharacter <= 0xFF; currCharacter++) {
+				if (pC64->keyBuffer[currCharacter]
+					&& ((c64_keyMap[currCharacter] >> 8) & tempCol)
+				) {
+					U8 rowFilter = ~(U8)(c64_keyMap[currCharacter] & 0xFF);
+					CIA1_read[DC01_portBKbdRowJStick1] &= rowFilter;
+				}
 			}
-		}
-	}
 
-	retVal = pProcessor->pMem->IO[address];
-	
-	if (
-		address == 0xDC0D
-	||	address == 0xDD0D
-	) {
-		pProcessor->pMem->IO[address] = 0;
+			retVal = CIA1_read[subAddr];
+
+		} else if (AND_IS(address, 0x0D, 0xFF)) {
+			retVal = CIA1_read[subAddr];
+			CIA1_read[subAddr] = 0;
+
+		} else {
+			retVal = CIA1_read[subAddr];
+		}
+
+	} else {
+		/* CIA2 register reads. */
+
+		if (AND_IS(address, 0x0D, 0xFF)) {
+			retVal = CIA1_read[subAddr];
+			CIA1_read[subAddr] = 0;
+		} else {
+			retVal = CIA2_read[subAddr];
+		}
 	}
 
     return retVal;
@@ -135,44 +151,104 @@ U8 c64_ciaRead(C64_t * pC64, mos65xx_addr address) {
 * Returns: -
 *******************************************************************************/
 void c64_ciaWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value) {
-	if (address == 0xDC04) {
-		CIA1_timAStartVal = (CIA1_timAStartVal & 0xFF00) | value;
+	pProcessor = pProcessor;
 
-	} else if (address == 0xDC05) {
-		CIA1_timAStartVal = (CIA1_timAStartVal & 0xFF) | (value << 8);
+	U8 subAddr = address & 0xFF;
+	U8 * readReg = CIA1_read;
+	U8 * writeReg = CIA1_write;
 
-	} else if (address == 0xDC06) {
-		CIA1_timBStartVal = (CIA1_timBStartVal & 0xFF) | (value << 8);
+ 	if (AND_IS(address, 0xDC00, 0xFF00)) {
+		switch (subAddr) {
+			case DC00_portAKbdColJStick2:
+			case DC01_portBKbdRowJStick1:
+			case DC02_portADataDir:
+			case DC03_portBDataDir:
+				readReg[subAddr] = value;
+				writeReg[subAddr] = value;
+				break;
 
-	} else if (address == 0xDC07) {
-		CIA1_timBStartVal = (CIA1_timBStartVal & 0xFF) | (value << 8);
+			case DC04_timerAValueLSB:
+			case DC05_timerAValueMSB:
+			case DC06_timerBValueLSB:
+			case DC07_timerBValueMSB:
+				writeReg[subAddr] = value;
+				break;
 
-	} else if (address == 0xDC0D) {
-		CIA1_irqEn = value & 0x80
-		?	CIA1_irqEn | (value & 0x7F)
-		:	(CIA1_irqEn & ~value) & 0x7F;
+			case DC08_timeOfDayTenths:
+			case DC09_timeOfDaySecs:
+			case DC0A_timeOfDayMins:
+			case DC0B_timeOfDayHours:
+			case DC0C_serialShiftReg:
+				readReg[subAddr] = value;
+				writeReg[subAddr] = value;
+				break;
 
+			case DC0D_intCtrlStatusReg:
+				writeReg[subAddr] = value & 0x80
+					? writeReg[subAddr] | (value & 0x7F)
+					: (writeReg[subAddr] & ~value) & 0x7F;
+				readReg[subAddr] &= ~value;
+				break;
 
-	} else if (address == 0xDD04) {
-		CIA2_timAStartVal = (CIA2_timAStartVal & 0xFF00) | value;
+			case DC0E_timerACtrl:
+			case DC0F_timerBCtrl:
+				readReg[subAddr] = value;
+				writeReg[subAddr] = value;
+				break;
 
-	} else if (address == 0xDD05) {
-		CIA2_timAStartVal = (CIA2_timAStartVal & 0xFF) | (value << 8);
+			default:
+				assert(0);
+		}
 
-	} else if (address == 0xDD06) {
-		CIA2_timBStartVal = (CIA2_timBStartVal & 0xFF00) | value;
+	} else if (AND_IS(address, 0xDD00, 0xFF00)) {
+		readReg = CIA2_read;
+		writeReg = CIA2_write;
 
-	} else if (address == 0xDD07) {
-		CIA2_timBStartVal = (CIA2_timBStartVal & 0xFF) | (value << 8);
+		switch (subAddr) {
+			case DD00_portASerial:
+				readReg[subAddr] = value;
+				writeReg[subAddr] = value;
+				break;
+			case DD01_portBRS232:
+			case DD02_portADataDir:
+			case DD03_portBDataDir:
+				readReg[subAddr] = value;
+				writeReg[subAddr] = value;
+				break;
 
-	} else if (address == 0xDD0D) {
-		CIA2_irqEn = value & 0x80
-		?	CIA2_irqEn | (value & 0x7F)
-		:	(CIA2_irqEn & ~value) & 0x7F;
+			case DD04_timerAValueLSB:
+			case DD05_timerAValueMSB:
+			case DD06_timerBValueLSB:
+			case DD07_timerBValueMSB:
+				writeReg[subAddr] = value;
+				break;
+
+			case DD08_timeOfDayTenths:
+			case DD09_timeOfDaySecs:
+			case DD0A_timeOfDayMins:
+			case DD0B_timeOfDayHours:
+			case DD0C_serialShiftReg:
+				readReg[subAddr] = value;
+				writeReg[subAddr] = value;
+				break;
+			case DD0D_intCtrlStatusReg:
+				writeReg[subAddr] = value & 0x80
+					? writeReg[subAddr] | (value & 0x7F)
+					: (writeReg[subAddr] & ~value) & 0x7F;
+				readReg[subAddr] &= ~value;
+				break;
+
+			case DD0E_timerACtrl:
+			case DD0F_timerBCtrl:
+				readReg[subAddr] = value;
+				writeReg[subAddr] = value;
+				break;
+
+			default:
+				assert(0);
+		}
 	} else {
-		
-		//printf("CIA: $%04X = $%02X\r\n", address, value);
-		pProcessor->pMem->IO[address] = value;
+		assert(0);
 	}
 }
 
@@ -188,26 +264,26 @@ void c64_ciaWrite(Processor_65xx * pProcessor, mos65xx_addr address, U8 value) {
 static void CIA__timAdvance(C64_t * pC64, U8 timerID) {
 
     /* Timer is set to reload. */
-	if (pC64->pProcessor->pMem->IO[timers[timerID].CTRL] & TIM_RELOAD) {
+	if (*timers[timerID].CTRL & TIM_RELOAD) {
 
-		pC64->pProcessor->pMem->IO[timers[timerID].MSB] = *timers[timerID].DEF >> 8;
-		pC64->pProcessor->pMem->IO[timers[timerID].LSB] = *timers[timerID].DEF & 0xFF;
+		*timers[timerID].CURRMSB = *timers[timerID].DEFMSB;
+		*timers[timerID].CURRLSB = *timers[timerID].DEFLSB;
 
-		pC64->pProcessor->pMem->IO[timers[timerID].CTRL] &= ~TIM_RELOAD;
+		*timers[timerID].CTRL &= ~TIM_RELOAD;
 	}
 
     /* Timer is running */
-	if (pC64->pProcessor->pMem->IO[timers[timerID].CTRL] & TIM_START) {
+	if (*timers[timerID].CTRL & TIM_START) {
 		U8 uflow = 0;
 		U16 timerValue, oldValue;
 
-		timerValue = pC64->pProcessor->pMem->IO[timers[timerID].MSB] << 8;
-		timerValue |= pC64->pProcessor->pMem->IO[timers[timerID].LSB] & 0xFF;
+		timerValue = *timers[timerID].CURRMSB << 8;
+		timerValue |= *timers[timerID].CURRLSB;
 		
 		oldValue = timerValue;
 		timerValue -= (U16)pC64->pProcessor->cycles.currentOp;
 
-		if (*timers[timerID].DEF == 0) {
+		if (*timers[timerID].DEFMSB == 0 && *timers[timerID].DEFLSB == 0) {
 			timerValue = 0;
 		}
 
@@ -215,42 +291,62 @@ static void CIA__timAdvance(C64_t * pC64, U8 timerID) {
 			uflow = 1;
 
             /* Reload on underflow or stop the timer. */
-			if ((pC64->pProcessor->pMem->IO[timers[timerID].CTRL] & TIM_STOP_UFLOW) == 0) {
-				timerValue = *timers[timerID].DEF - (U16_MAX - timerValue);
+			if ((*timers[timerID].CTRL & TIM_STOP_UFLOW) == 0) {
+				/* Set new timer value. */
+				U16 timerDefault = (*timers[timerID].DEFMSB << 8) | *timers[timerID].DEFLSB;
+				timerValue = timerDefault - (U16_MAX - timerValue);
 
 			} else {
-				pC64->pProcessor->pMem->IO[timers[timerID].CTRL] &= 0xFE;
+				*timers[timerID].CTRL &= 0xFE;
 				timerValue = 0;
 			}
 		}
 
-        /* Set new timer value. */
-		pC64->pProcessor->pMem->IO[timers[timerID].MSB] = timerValue >> 8;
-		pC64->pProcessor->pMem->IO[timers[timerID].LSB] = timerValue & 0xFF;
+		*timers[timerID].CURRMSB = timerValue >> 8;
+		*timers[timerID].CURRLSB = timerValue & 0xFF;
 
-        /* On underflow, trigger interrupt. */
+        /* Underflow occured. */
 		if (uflow) {
-            pC64->pProcessor->pMem->IO[DC0D_intCtrlStatusReg] |= CIA_IRQ_CS_TIM_A;
 
-			if (timerID == CIA1_TIM_A
-            &&  pC64->pProcessor->pMem->IO[timers[timerID].CTRL] & TIM_PORTB_UFLOW && uflow
-            ) {
+			if (timerID == CIA1_TIM_A) {
+
+				if (CIA1_write[DC0D_intCtrlStatusReg] & CIA_IRQ_CS_TIM_A) {
+					CIA1_read[DC0D_intCtrlStatusReg] |= CIA_IRQ_CS_TIM_A;
+				}
+
+				if ((*timers[timerID].CTRL & TIM_PORTB_UFLOW) && uflow) {
 					// TODO: portA bit 6 ON
+				}
 			}
-			if (timerID == CIA1_TIM_B
-            &&  pC64->pProcessor->pMem->IO[timers[timerID].CTRL] & TIM_PORTB_UFLOW && uflow
-            ) {
+			if (timerID == CIA1_TIM_B) {
+
+				if (CIA1_write[DC0D_intCtrlStatusReg] & CIA_IRQ_CS_TIM_B) {
+					CIA1_read[DC0D_intCtrlStatusReg] |= CIA_IRQ_CS_TIM_B;
+				}
+
+				if ((*timers[timerID].CTRL & TIM_PORTB_UFLOW) && uflow) {
 					// TODO: portA bit 7 ON
+				}
 			}
-			if (timerID == CIA2_TIM_A
-            &&  pC64->pProcessor->pMem->IO[timers[timerID].CTRL] & TIM_PORTB_UFLOW && uflow
-            ) {
+			if (timerID == CIA2_TIM_A) {
+
+				if (CIA2_write[DC0D_intCtrlStatusReg] & CIA_IRQ_CS_TIM_A) {
+					CIA2_read[DD0D_intCtrlStatusReg] |= CIA_IRQ_CS_TIM_A;
+				}
+
+				if ((*timers[timerID].CTRL & TIM_PORTB_UFLOW) && uflow) {
 					// TODO: portB bit 6 ON
+				}
 			}
-			if (timerID == CIA2_TIM_B
-            &&  pC64->pProcessor->pMem->IO[timers[timerID].CTRL] & TIM_PORTB_UFLOW && uflow
-            ) {
+			if (timerID == CIA2_TIM_B) {
+
+				if (CIA2_write[DC0D_intCtrlStatusReg] & CIA_IRQ_CS_TIM_B) {
+					CIA2_read[DD0D_intCtrlStatusReg] |= CIA_IRQ_CS_TIM_B;
+				}
+
+				if ((*timers[timerID].CTRL & TIM_PORTB_UFLOW) && uflow) {
 					// TODO: portB bit 7 ON
+				}
 			}
 		}
 	}

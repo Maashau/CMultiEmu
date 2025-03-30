@@ -15,6 +15,9 @@ enum {
 	EXT_KEYS_RSHIFT,
 	EXT_KEYS_CTRL,
     EXT_KEYS_COMMODORE,
+    EXT_KEYS_EQUAL,
+	EXT_KEYS_SEMICOLON,
+	EXT_KEYS_COLON
 };
 
 void bufferKey(C64_t * pC64, SDL_Keycode key, U8 isPressed);
@@ -109,7 +112,21 @@ int sdlThread(void * pData) {
 
 void bufferKey(C64_t * pC64, SDL_Keycode key, U8 isPressed) {
 
-	if (key >= 0 && key <= SDLK_DELETE) {
+	static U8 shiftActive = 0;
+
+	if (shiftActive && key == SDLK_COMMA) {
+		pC64->keyBuffer[';'] = isPressed;
+		
+	} else if (shiftActive && key == SDLK_PERIOD) {
+		pC64->keyBuffer[':'] = isPressed;
+		
+	} else if (shiftActive && key == SDLK_0) {
+		pC64->keyBuffer[EXT_KEYS_EQUAL] = isPressed;
+
+	} else if (key >= 0 && key <= SDLK_DELETE) {
+		if (shiftActive) {
+			pC64->keyBuffer[EXT_KEYS_LSHIFT] = isPressed;
+		}
 		pC64->keyBuffer[key] = isPressed;
 
 	} else if (key == SDLK_BACKSPACE) {
@@ -128,10 +145,16 @@ void bufferKey(C64_t * pC64, SDL_Keycode key, U8 isPressed) {
 		pC64->keyBuffer[EXT_KEYS_DOWNARR] = isPressed;
 		
 	} else if (key == SDLK_LSHIFT) {
-		pC64->keyBuffer[EXT_KEYS_LSHIFT] = isPressed;
-		
+		shiftActive = isPressed ? shiftActive | 1 : shiftActive & ~1;
+		if (!isPressed) {
+			pC64->keyBuffer[EXT_KEYS_LSHIFT] = isPressed;
+		}
+
 	} else if (key == SDLK_RSHIFT) {
-		pC64->keyBuffer[EXT_KEYS_RSHIFT] = isPressed;
+		shiftActive = isPressed ? shiftActive | 2 : shiftActive & ~2;
+		if (!isPressed) {
+			pC64->keyBuffer[EXT_KEYS_RSHIFT] = isPressed;
+		}
 
 	} else if (key == SDLK_LCTRL || key == SDLK_RCTRL) {
 		pC64->keyBuffer[EXT_KEYS_CTRL] = isPressed;
